@@ -15,7 +15,7 @@ impl Signal for Sine {
 
 pub(crate) struct Voice<S: Signal> {
     /// Project samplerate
-    samplerate: f64,
+    samplerate: f32,
     /// Oscillator frequency
     frequency: f64,
     /// frequency / samplerate
@@ -30,7 +30,12 @@ pub(crate) struct Voice<S: Signal> {
 }
 
 impl<S: Signal> Voice<S> {
-    fn new(signal: S, samplerate: f64, frequency: f64, phase_offset: Option<f64>) -> Self {
+    pub(crate) fn new(
+        signal: S,
+        samplerate: f32,
+        frequency: f64,
+        phase_offset: Option<f64>,
+    ) -> Self {
         let phase = phase_offset.unwrap_or(0.0) % 1.0;
 
         debug_assert!(
@@ -42,7 +47,7 @@ impl<S: Signal> Voice<S> {
             "frequency must be positive, got: {frequency}",
         );
         debug_assert!(
-            frequency < samplerate,
+            frequency < samplerate.into(),
             "frequency must be less than samplerate `{samplerate}`, got: {frequency}",
         );
         debug_assert!(
@@ -54,13 +59,13 @@ impl<S: Signal> Voice<S> {
             signal,
             samplerate,
             frequency,
-            fraction_frequency: frequency / samplerate,
+            fraction_frequency: frequency / samplerate as f64,
             phase,
             phase_offset: phase,
         }
     }
 
-    fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.phase = self.phase_offset;
     }
 
@@ -88,7 +93,7 @@ impl<S: Signal> Voice<S> {
         return self.phase;
     }
 
-    fn set_samplerate(&mut self, sr: f64) {
+    pub(crate) fn set_samplerate(&mut self, sr: f32) {
         // Only update and recalculate if new SR value is different
         if sr != self.samplerate {
             // Import number of samples per second
@@ -97,7 +102,7 @@ impl<S: Signal> Voice<S> {
             // If the SR is changed while a Frequency was already set
             if (self.frequency > 0.0) {
                 // Recalculate the per-sample phase modifier
-                self.fraction_frequency = self.frequency / self.samplerate;
+                self.fraction_frequency = self.frequency / self.samplerate as f64;
             }
 
             debug_assert!(
@@ -111,7 +116,7 @@ impl<S: Signal> Voice<S> {
                 self.frequency,
             );
             debug_assert!(
-                self.frequency < self.samplerate,
+                self.frequency < self.samplerate as f64,
                 "frequency must be less than samplerate `{}`, got: {}",
                 self.samplerate,
                 self.frequency,
@@ -119,7 +124,7 @@ impl<S: Signal> Voice<S> {
         }
     }
 
-    fn set_frequency(&mut self, hz: f64) {
+    pub(crate) fn set_frequency(&mut self, hz: f64) {
         // Only update and recalculate if new Hz value is different
         if hz != self.frequency {
             // Import new center frequency
@@ -128,7 +133,7 @@ impl<S: Signal> Voice<S> {
             // If the center frequency is changed while SR was already set
             if self.samplerate > 0.0 {
                 // Recalculate the per-sample phase modifier
-                self.fraction_frequency = self.frequency / self.samplerate;
+                self.fraction_frequency = self.frequency / self.samplerate as f64;
             }
 
             debug_assert!(
@@ -142,7 +147,7 @@ impl<S: Signal> Voice<S> {
                 self.frequency,
             );
             debug_assert!(
-                self.frequency < self.samplerate,
+                self.frequency < self.samplerate as f64,
                 "frequency must be less than samplerate `{}`, got: {}",
                 self.samplerate,
                 self.frequency,
@@ -150,7 +155,7 @@ impl<S: Signal> Voice<S> {
         }
     }
 
-    fn set_phase_offset(&mut self, offset: f64) {
+    pub(crate) fn set_phase_offset(&mut self, offset: f64) {
         debug_assert!(
             0.0 <= offset && offset <= 1.0,
             "phase offset must be between 0.0 and 1.0, got: {offset}",
@@ -164,7 +169,7 @@ impl<S: Signal> Voice<S> {
 
     /// Fills an entire Buffer of DOUBLE samples with the same mono oscillator wave on all channels.
     /// This will overwrite any signal previously in the Buffer.
-    fn fill(&mut self, buf: &mut Buffer) {
+    pub(crate) fn fill(&mut self, buf: &mut Buffer) {
         for channel_samples in buf.iter_samples() {
             // Fill each sample with the next oscillator tick sample
             self.tick();
@@ -177,7 +182,7 @@ impl<S: Signal> Voice<S> {
 
     /// Adds the same mono oscillator wave to all channels of the passed Buffer of DOUBLE samples.
     /// This will keep any signal previously in the Buffer and add to it.
-    fn add(&mut self, buf: &mut Buffer) {
+    pub(crate) fn add(&mut self, buf: &mut Buffer) {
         for channel_samples in buf.iter_samples() {
             // Fill each sample with the next oscillator tick sample
             self.tick();

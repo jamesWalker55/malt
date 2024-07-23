@@ -2,9 +2,11 @@ mod voice;
 
 use nih_plug::prelude::*;
 use std::sync::Arc;
+use voice::{Sine, Voice};
 
 struct SaiSampler {
     params: Arc<SaiSamplerParams>,
+    voice: Voice<Sine>,
 }
 
 #[derive(Params)]
@@ -17,6 +19,7 @@ impl Default for SaiSampler {
     fn default() -> Self {
         Self {
             params: Arc::new(SaiSamplerParams::default()),
+            voice: Voice::new(Sine, 100.0, 50.0, None),
         }
     }
 }
@@ -77,24 +80,23 @@ impl Plugin for SaiSampler {
         _buffer_config: &BufferConfig,
         _context: &mut impl InitContext<Self>,
     ) -> bool {
+        self.voice.set_samplerate(_buffer_config.sample_rate);
+        self.voice.set_frequency(440.0);
+
         true
     }
 
-    fn reset(&mut self) {}
+    fn reset(&mut self) {
+        self.voice.reset();
+    }
 
     fn process(
         &mut self,
-        buffer: &mut Buffer,
+        mut buffer: &mut Buffer,
         _aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        for channel_samples in buffer.iter_samples() {
-            let gain = self.params.gain.smoothed.next();
-
-            for sample in channel_samples {
-                *sample = gain;
-            }
-        }
+        self.voice.fill(&mut buffer);
 
         ProcessStatus::Normal
     }
