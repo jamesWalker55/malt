@@ -45,21 +45,10 @@ struct Skeleton {
     /// frequency / samplerate
     fraction_frequency: f64,
 
-    /// Oscillator volume
-    amplitude: f32,
-
-    /// Last oscillator state (output value)
-    state: f64,
-
     /// Last phase position in range [0,1]
     phase: f64,
     /// Phase start offset after oscillator was reset()
     phase_offset: f64,
-
-    /// SAW modifier: 1.0 = rising, -1.0 = falling wave
-    direction: f64,
-    /// PULSE modifier: pulse width in range [0,1] per half phase
-    width: f64,
 }
 
 impl Default for Skeleton {
@@ -68,12 +57,8 @@ impl Default for Skeleton {
             samplerate: 0.0,
             frequency: 0.0,
             fraction_frequency: 0.0,
-            amplitude: 0.5,
-            state: 0.0,
             phase: 0.0,
             phase_offset: 0.0,
-            direction: 1.0,
-            width: 1.0,
         }
     }
 }
@@ -82,7 +67,6 @@ impl Skeleton {
     /// Call this whenever the sine stream should restart, e.g. before note on etc.
     /// Will reset state value to 0.0 and phase value to phaseOffset start value.
     fn reset(&mut self) {
-        self.state = 0.0;
         self.phase = self.phase_offset;
     }
 
@@ -122,28 +106,6 @@ impl Skeleton {
         }
     }
 
-    /// Sets the oscillator amplitude as float gain (not dB).
-    fn setAmplitude(&mut self, amp: f32) {
-        // Only update if the new amplitude is different
-        if (amp != self.amplitude) {
-            self.amplitude = amp;
-        }
-    }
-
-    /// Sets the oscillator volume in Decibels (use negative values).
-    fn setVolume(&mut self, dB: f64) {
-        // Convert dB to float gain and send to setAmplitude()
-        self.setAmplitude(db_to_gain(dB));
-    }
-
-    /// Sets the current oscillator sample state to a specific value manually.
-    fn setState(&mut self, State: f64) {
-        // Only update if the new state value is different from the current state
-        if State != self.state {
-            self.state = State;
-        }
-    }
-
     /// Sets a phase starting offset for the oscillator.
     /// Range is in [0,1] x 1 cycle.
     /// This is NOT the current phase step/state value.
@@ -151,33 +113,6 @@ impl Skeleton {
         // Only update if new phase offset value is different
         if (Offset != self.phase_offset) {
             self.phase_offset = Offset;
-        }
-    }
-
-    /// Sets a directional offset for saw oscillator.
-    /// Range is [-1;1] where +1 is rising and -1 is falling wave.
-    fn setDirection(&mut self, Direction: f64) {
-        if (Direction != self.direction) {
-            self.direction = Direction;
-        }
-    }
-
-    /// Sets the pulse width for a pulse wave oscillator.
-    /// Range is in [0,1] where 0 = silence and 0.5 = square wave.
-    fn setPulseWidth(&mut self, Width: f64) {
-        if (Width != self.width) {
-            self.width = Width;
-        }
-    }
-
-    /// Sets the pulse width for a square pulse wave oscillator.
-    /// Range is in [0,1] where 0 = silence and 1 = square wave.
-    fn setWidth(&mut self, Width: f64) {
-        // Needs to be halved, since will be used per 1/2 cycle
-        let newWidth: f64 = Width * 0.5;
-
-        if (newWidth != self.width) {
-            self.width = newWidth;
         }
     }
 
@@ -191,22 +126,6 @@ impl Skeleton {
         return self.frequency;
     }
 
-    /// Returns the currently set oscillator amplitude as float gain factor.
-    fn getAmplitude(&self) -> f32 {
-        return self.amplitude;
-    }
-
-    /// Returns the currently set oscillator volume in (negative) Decibels.
-    fn getVolume(&self) -> f64 {
-        return gain_to_db(self.amplitude);
-    }
-
-    /// Returns the current oscillator sample state.
-    /// Does NOT generate a new value, use .tick() for that.
-    fn getState(&self) -> f64 {
-        return self.state;
-    }
-
     /// Returns the current oscillator phase value.
     /// This is the actual phase step, not the reset offset.
     fn getPhase(&self) -> f64 {
@@ -216,25 +135,6 @@ impl Skeleton {
     /// Returns the current oscillator phase reset offset.
     fn getPhaseOffset(&self) -> f64 {
         return self.phase_offset;
-    }
-
-    /// Returns the current directional offset value.
-    /// Only applies to SAW WAVE oscillators.
-    fn getDirection(&self) -> f64 {
-        return self.direction;
-    }
-
-    /// Returns the current pulse width modifier value.
-    /// Only applies to PULSE WAVE oscillators.
-    fn getPulseWidth(&self) -> f64 {
-        return self.width;
-    }
-
-    /// Returns the current square pulse width modifier value.
-    /// Only applies to SQUARE PULSE WAVE oscillators.
-    fn getWidth(&self) -> f64 {
-        // Must be doubled since stored value is per 1/2 cycle
-        return self.width * 2.0;
     }
 }
 
@@ -269,164 +169,4 @@ trait Generator {
 
         // The passed Buffer now contains its original signal plus the oscillator signal on all channels
     }
-}
-
-struct Wrapper {
-    generator: Skeleton,
-}
-
-impl Wrapper {
-    fn new() -> Self {
-        Self {
-            generator: Skeleton::default(),
-        }
-    }
-
-    /// Resets the current oscillator state to the start of a new cycle.
-    fn reset(&mut self) {
-        self.generator.reset();
-    }
-
-    /// Sets the oscillator sample rate in Hertz.
-    fn setSampleRate(&mut self, SR: f64) {
-        self.generator.setSampleRate(SR);
-    }
-
-    /// Sets the oscillator center frequency in Hertz.
-    fn setFrequency(&mut self, Hz: f64) {
-        self.generator.setFrequency(Hz);
-    }
-
-    /// Sets the oscillator amplitude as float gain (not dB).
-    fn setAmplitude(&mut self, Amplitude: f32) {
-        self.generator.setAmplitude(Amplitude);
-    }
-
-    /// Sets the oscillator volume in Decibels (use negative values).
-    fn setVolume(&mut self, dB: f64) {
-        self.generator.setVolume(dB);
-    }
-
-    /// Sets the current oscillator sample state to a specific value manually.
-    fn setState(&mut self, State: f64) {
-        self.generator.setState(State);
-    }
-
-    /// Sets a phase starting offset for the oscillator.
-    /// Range is in [0,1] x 1 cycle.
-    /// This is NOT the current phase step/state value.
-    fn setPhaseOffset(&mut self, Offset: f64) {
-        self.generator.setPhaseOffset(Offset);
-    }
-
-    /// Sets a directional offset for saw oscillator.
-    /// Range is [-1;1] where +1 is rising and -1 is falling wave.
-    fn setDirection(&mut self, Direction: f64) {
-        self.generator.setDirection(Direction);
-    }
-
-    /// Sets the pulse width for a pulse wave oscillator.
-    /// Range is in [0,1] where 0 = silence and 0.5 = square wave.
-    fn setPulseWidth(&mut self, PulseWidth: f64) {
-        self.generator.setPulseWidth(PulseWidth);
-    }
-
-    /// Sets the pulse width for a square pulse wave oscillator.
-    /// Range is in [0,1] where 0 = silence and 1 = square wave.
-    fn setWidth(&mut self, PulseWidth: f64) {
-        self.generator.setWidth(PulseWidth);
-    }
-
-    // /// Band-limited oscillators only! Sets the amount of harmonics that will be
-    // /// calculated. Less = lighter on CPU, more = higher precision, default is 7.
-    // fn setAccuracy(&mut self, Quality: u32) {
-    //     self.generator.setMaxHarmonics(Quality);
-    // }
-
-    /// Convenience function to set up most parameters at once.
-    /// Accepts an optional double Phase Offset parameter at the end.
-    fn setup(&mut self, SR: f64, Hz: f64, Amplitude: f32, Phase: Option<f64>) {
-        let Phase = Phase.unwrap_or(0.0);
-
-        self.setSampleRate(SR);
-        self.setFrequency(Hz);
-        self.setAmplitude(Amplitude);
-
-        if (Phase != 0.0) {
-            self.setPhaseOffset(Phase);
-        }
-    }
-
-    // /// Convenience function to set up most parameters at once.
-    // /// Accepts an optional double Phase Offset parameter at the end.
-    // fn setup(&mut self, SR: f64, Hz: f64, Volume: f64, Phase: Option<f64>) {
-    //     let Phase = Phase.unwrap_or(0.0);
-
-    //     self.setSampleRate(SR);
-    //     self.setFrequency(Hz);
-    //     self.setVolume(Volume);
-
-    //     if (Phase != 0.0) {
-    //         self.setPhaseOffset(Phase);
-    //     }
-    // }
-
-    /// Returns the currently set oscillator sample rate.
-    fn getSampleRate(&self) -> f64 {
-        return self.generator.getSampleRate();
-    }
-
-    /// Returns the currently set oscillator frequency.
-    fn getFrequency(&self) -> f64 {
-        return self.generator.getFrequency();
-    }
-
-    /// Returns the currently set oscillator amplitude as float gain factor.
-    fn getAmplitude(&self) -> f32 {
-        return self.generator.getAmplitude();
-    }
-
-    /// Returns the currently set oscillator volume in (negative) Decibels.
-    fn getVolume(&self) -> f64 {
-        return self.generator.getVolume();
-    }
-
-    /// Returns the current oscillator sample state.
-    /// Does NOT generate a new value, use .tick() for that.
-    fn getState(&self) -> f64 {
-        return self.generator.getState();
-    }
-
-    /// Returns the current oscillator phase value.
-    /// This is the actual phase step, not the reset offset.
-    fn getPhase(&self) -> f64 {
-        return self.generator.getPhase();
-    }
-
-    /// Returns the current oscillator phase reset offset.
-    fn getPhaseOffset(&self) -> f64 {
-        return self.generator.getPhaseOffset();
-    }
-
-    /// Returns the current directional offset value.
-    /// Only applies to SAW WAVE oscillators.
-    fn getDirection(&self) -> f64 {
-        return self.generator.getDirection();
-    }
-
-    /// Returns the current pulse width modifier value.
-    /// Only applies to PULSE WAVE oscillators.
-    fn getPulseWidth(&self) -> f64 {
-        return self.generator.getPulseWidth();
-    }
-
-    /// Returns the current square pulse width modifier value.
-    /// Only applies to SQUARE PULSE WAVE oscillators.
-    fn getWidth(&self) -> f64 {
-        return self.generator.getWidth();
-    }
-
-    // fn getAccuracy(&self) -> u32 {
-    //     return self.generator.getMaxHarmonics();
-    // }
 }
