@@ -21,24 +21,20 @@ const M_4_PI: f64 = 1.27323954473516268615107010698011489627567716592365;
 /// 8 / (PI * PI)
 const M_8_PIPI: f64 = 0.81056946913870217155103570567782111123487019737797;
 
-mod Decibels {
-    use super::*;
+/// Turns Decibels into float gain factor
+fn db_to_gain(db: f64) -> f32 {
+    return (db * M_20_LN10).exp() as f32;
+}
 
-    /// Turns Decibels into float gain factor
-    pub(crate) fn ToGain(dB: f64) -> f32 {
-        return (dB * M_20_LN10).exp() as f32;
+/// Turns float gain factor into Decibels
+fn gain_to_db(gain: f32) -> f64 {
+    if gain < 0.0000000298023223876953125 {
+        return -150.0;
     }
 
-    /// Turns float gain factor into Decibels
-    pub(crate) fn FromGain(Gain: f32) -> f64 {
-        if Gain < 0.0000000298023223876953125 {
-            return -150.0;
-        }
+    let dB = (gain as f64).ln() * M_LN10_20;
 
-        let dB = (Gain as f64).ln() * M_LN10_20;
-
-        return dB.max(-150.0);
-    }
+    return dB.max(-150.0);
 }
 
 struct Skeleton {
@@ -137,7 +133,7 @@ impl Skeleton {
     /// Sets the oscillator volume in Decibels (use negative values).
     fn setVolume(&mut self, dB: f64) {
         // Convert dB to float gain and send to setAmplitude()
-        self.setAmplitude(Decibels::ToGain(dB));
+        self.setAmplitude(db_to_gain(dB));
     }
 
     /// Sets the current oscillator sample state to a specific value manually.
@@ -202,7 +198,7 @@ impl Skeleton {
 
     /// Returns the currently set oscillator volume in (negative) Decibels.
     fn getVolume(&self) -> f64 {
-        return Decibels::FromGain(self.amplitude);
+        return gain_to_db(self.amplitude);
     }
 
     /// Returns the current oscillator sample state.
