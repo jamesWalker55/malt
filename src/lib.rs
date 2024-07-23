@@ -46,12 +46,12 @@ impl Default for SaiSamplerParams {
                 "Frequency",
                 440.0,
                 FloatRange::Skewed {
-                    min: 100.0,
-                    max: 20_000.0,
-                    factor: FloatRange::skew_factor(-1.0),
+                    min: 50.0,
+                    max: 10_000.0,
+                    factor: FloatRange::skew_factor(-2.0),
                 },
             )
-            .with_smoother(SmoothingStyle::Exponential(10.0))
+            .with_smoother(SmoothingStyle::Exponential(500.0))
             .with_value_to_string(formatters::v2s_f32_hz_then_khz(2))
             .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
         }
@@ -118,7 +118,7 @@ impl Plugin for SaiSampler {
             // Fill each sample with the next oscillator tick sample
             let val = self.voice.tick();
             for sample in channel_samples {
-                *sample += val * 0.2;
+                *sample += val * gain;
             }
         }
 
