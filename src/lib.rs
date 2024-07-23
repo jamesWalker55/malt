@@ -26,12 +26,12 @@ impl Default for SaiSamplerParams {
                 "Gain",
                 util::db_to_gain(0.0),
                 FloatRange::Skewed {
-                    min: util::db_to_gain(-30.0),
-                    max: util::db_to_gain(30.0),
-                    factor: FloatRange::gain_skew_factor(-30.0, 30.0),
+                    min: util::db_to_gain(-60.0),
+                    max: util::db_to_gain(0.0),
+                    factor: FloatRange::gain_skew_factor(-60.0, 0.0),
                 },
             )
-            .with_smoother(SmoothingStyle::Logarithmic(50.0))
+            .with_smoother(SmoothingStyle::Logarithmic(20.0))
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
@@ -48,7 +48,7 @@ impl Plugin for SaiSampler {
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
     const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[AudioIOLayout {
-        main_input_channels: NonZeroU32::new(2),
+        main_input_channels: None,
         main_output_channels: NonZeroU32::new(2),
 
         aux_input_ports: &[],
@@ -57,7 +57,7 @@ impl Plugin for SaiSampler {
         names: PortNames::const_default(),
     }];
 
-    const MIDI_INPUT: MidiConfig = MidiConfig::None;
+    const MIDI_INPUT: MidiConfig = MidiConfig::MidiCCs;
     const MIDI_OUTPUT: MidiConfig = MidiConfig::None;
 
     const SAMPLE_ACCURATE_AUTOMATION: bool = true;
@@ -90,7 +90,7 @@ impl Plugin for SaiSampler {
             let gain = self.params.gain.smoothed.next();
 
             for sample in channel_samples {
-                *sample *= gain;
+                *sample = gain;
             }
         }
 
