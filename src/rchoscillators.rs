@@ -83,13 +83,6 @@ impl Default for Skeleton {
 }
 
 impl Skeleton {
-    /// Calculates and returns the next sample for this oscillator type.
-    /// OVERRIDE this in the derived class.
-    fn tick(&self) -> f64 {
-        // OVERRIDE THIS IN THE OSCILLATOR CLASS
-        return self.state;
-    }
-
     /// Call this whenever the sine stream should restart, e.g. before note on etc.
     /// Will reset state value to 0.0 and phase value to phaseOffset start value.
     fn reset(&mut self) {
@@ -246,6 +239,39 @@ impl Skeleton {
     fn getWidth(&self) -> f64 {
         // Must be doubled since stored value is per 1/2 cycle
         return self.width * 2.0;
+    }
+}
+
+trait Generator {
+    /// Calculates and returns the next sample for this oscillator type.
+    fn tick(&self) -> f64;
+
+    /// Fills an entire Buffer of DOUBLE samples with the same mono oscillator wave on all channels.
+    /// This will overwrite any signal previously in the Buffer.
+    fn fill(&self, Buffer: &mut Buffer) {
+        for channel_samples in Buffer.iter_samples() {
+            // Fill each sample with the next oscillator tick sample
+            let tick = self.tick() as f32;
+            for sample in channel_samples {
+                *sample = tick;
+            }
+        }
+
+        // The passed Buffer now contains the oscillator signal on all its channels
+    }
+
+    /// Adds the same mono oscillator wave to all channels of the passed Buffer of DOUBLE samples.
+    /// This will keep any signal previously in the Buffer and add to it.
+    fn add(&self, Buffer: &mut Buffer) {
+        for channel_samples in Buffer.iter_samples() {
+            // Fill each sample with the next oscillator tick sample
+            let tick = self.tick() as f32;
+            for sample in channel_samples {
+                *sample += tick;
+            }
+        }
+
+        // The passed Buffer now contains its original signal plus the oscillator signal on all channels
     }
 }
 
@@ -407,32 +433,4 @@ impl Wrapper {
     // fn getAccuracy(&self) -> u32 {
     //     return self.generator.getMaxHarmonics();
     // }
-
-    /// Fills an entire Buffer of DOUBLE samples with the same mono oscillator wave on all channels.
-    /// This will overwrite any signal previously in the Buffer.
-    fn fill(&self, Buffer: &mut Buffer) {
-        for channel_samples in Buffer.iter_samples() {
-            // Fill each sample with the next oscillator tick sample
-            let tick = self.generator.tick() as f32;
-            for sample in channel_samples {
-                *sample = tick;
-            }
-        }
-
-        // The passed Buffer now contains the oscillator signal on all its channels
-    }
-
-    /// Adds the same mono oscillator wave to all channels of the passed Buffer of DOUBLE samples.
-    /// This will keep any signal previously in the Buffer and add to it.
-    fn add(&self, Buffer: &mut Buffer) {
-        for channel_samples in Buffer.iter_samples() {
-            // Fill each sample with the next oscillator tick sample
-            let tick = self.generator.tick() as f32;
-            for sample in channel_samples {
-                *sample += tick;
-            }
-        }
-
-        // The passed Buffer now contains its original signal plus the oscillator signal on all channels
-    }
 }
