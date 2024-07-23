@@ -140,11 +140,11 @@ impl Skeleton {
 
 trait Generator {
     /// Calculates and returns the next sample for this oscillator type.
-    fn tick(&self) -> f64;
+    fn tick(&mut self) -> f64;
 
     /// Fills an entire Buffer of DOUBLE samples with the same mono oscillator wave on all channels.
     /// This will overwrite any signal previously in the Buffer.
-    fn fill(&self, Buffer: &mut Buffer) {
+    fn fill(&mut self, Buffer: &mut Buffer) {
         for channel_samples in Buffer.iter_samples() {
             // Fill each sample with the next oscillator tick sample
             let tick = self.tick() as f32;
@@ -152,13 +152,11 @@ trait Generator {
                 *sample = tick;
             }
         }
-
-        // The passed Buffer now contains the oscillator signal on all its channels
     }
 
     /// Adds the same mono oscillator wave to all channels of the passed Buffer of DOUBLE samples.
     /// This will keep any signal previously in the Buffer and add to it.
-    fn add(&self, Buffer: &mut Buffer) {
+    fn add(&mut self, Buffer: &mut Buffer) {
         for channel_samples in Buffer.iter_samples() {
             // Fill each sample with the next oscillator tick sample
             let tick = self.tick() as f32;
@@ -166,7 +164,5 @@ trait Generator {
                 *sample += tick;
             }
         }
-
-        // The passed Buffer now contains its original signal plus the oscillator signal on all channels
     }
 }
