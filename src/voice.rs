@@ -1,19 +1,6 @@
-use std::f64::consts::TAU;
+use crate::oscillator::Oscillator;
 
-pub(crate) trait Signal {
-    /// Calculates and returns the next sample for this oscillator type.
-    fn gen(&mut self, phase: f64) -> f32;
-}
-
-pub(crate) struct Sine;
-
-impl Signal for Sine {
-    fn gen(&mut self, phase: f64) -> f32 {
-        (phase * TAU).sin() as f32
-    }
-}
-
-pub(crate) struct Voice<S: Signal> {
+pub(crate) struct Voice<S: Oscillator> {
     /// Project samplerate
     samplerate: f32,
     /// Oscillator frequency
@@ -29,7 +16,7 @@ pub(crate) struct Voice<S: Signal> {
     signal: S,
 }
 
-impl<S: Signal> Voice<S> {
+impl<S: Oscillator> Voice<S> {
     pub(crate) fn new(
         signal: S,
         samplerate: f32,
@@ -88,7 +75,7 @@ impl<S: Signal> Voice<S> {
         self.phase +=
             ((self.phase >= 1.0) as u8 as f64 * -1.0) + ((self.phase < 0.0) as u8 as f64 * 1.0);
 
-        self.signal.gen(self.phase)
+        self.signal.osc(self.phase)
     }
 
     pub(crate) fn set_samplerate(&mut self, sr: f32) {

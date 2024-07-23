@@ -1,12 +1,14 @@
+mod oscillator;
 mod voice;
 
 use nih_plug::prelude::*;
+use oscillator as osc;
 use std::sync::Arc;
-use voice::{Sine, Voice};
+use voice::Voice;
 
 struct SaiSampler {
     params: Arc<SaiSamplerParams>,
-    voice: Voice<Sine>,
+    voice: Voice<osc::Saw>,
 }
 
 #[derive(Params)]
@@ -21,7 +23,7 @@ impl Default for SaiSampler {
     fn default() -> Self {
         Self {
             params: Arc::new(SaiSamplerParams::default()),
-            voice: Voice::new(Sine, 100.0, 50.0, None),
+            voice: Voice::new(osc::Saw::new(true), 100.0, 50.0, None),
         }
     }
 }
