@@ -41,7 +41,7 @@ impl Default for SaiSamplerParams {
 
 impl Plugin for SaiSampler {
     const NAME: &'static str = "SAI Sampler";
-    const VENDOR: &'static str = "Your Name";
+    const VENDOR: &'static str = "James Walker";
     const URL: &'static str = env!("CARGO_PKG_HOMEPAGE");
     const EMAIL: &'static str = "your@email.com";
 

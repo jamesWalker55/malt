@@ -2,7 +2,7 @@
 name = "sai_sampler"
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <your@email.com>"]
+authors = ["James Walker <your@email.com>"]
 license = "ISC"
 homepage = "https://youtu.be/dQw4w9WgXcQ"
 description = "An audio sampler"
