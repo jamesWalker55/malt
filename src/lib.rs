@@ -1,3 +1,5 @@
+mod rchoscillators;
+
 use nih_plug::prelude::*;
 use std::sync::Arc;
 
