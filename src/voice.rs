@@ -2,7 +2,7 @@ use std::f64::consts::PI;
 
 use nih_plug::buffer::Buffer;
 
-trait Signal {
+pub(crate) trait Signal {
     /// Calculates and returns the next sample for this oscillator type.
     fn gen(&mut self, phase: f64) -> f32;
 }
@@ -19,7 +19,7 @@ pub(crate) struct Voice<S: Signal> {
     /// Project samplerate
     samplerate: f32,
     /// Oscillator frequency
-    frequency: f64,
+    frequency: f32,
     /// frequency / samplerate
     fraction_frequency: f64,
 
@@ -35,7 +35,7 @@ impl<S: Signal> Voice<S> {
     pub(crate) fn new(
         signal: S,
         samplerate: f32,
-        frequency: f64,
+        frequency: f32,
         phase_offset: Option<f64>,
     ) -> Self {
         let phase = phase_offset.unwrap_or(0.0) % 1.0;
@@ -61,7 +61,7 @@ impl<S: Signal> Voice<S> {
             signal,
             samplerate,
             frequency,
-            fraction_frequency: frequency / samplerate as f64,
+            fraction_frequency: frequency as f64 / samplerate as f64,
             phase,
             phase_offset: phase,
         }
@@ -71,7 +71,7 @@ impl<S: Signal> Voice<S> {
         self.phase = self.phase_offset;
     }
 
-    fn tick(&mut self) {
+    fn tick(&mut self) -> f32 {
         // Increase phase by +1 step
         self.phase += self.fraction_frequency;
 
@@ -89,10 +89,8 @@ impl<S: Signal> Voice<S> {
         // IF-branches are slower than simple maths in time critical code, this does the same but faster
         self.phase +=
             ((self.phase >= 1.0) as u8 as f64 * -1.0) + ((self.phase < 0.0) as u8 as f64 * 1.0);
-    }
 
-    fn phase(&self) -> f64 {
-        return self.phase;
+        self.signal.gen(self.phase)
     }
 
     pub(crate) fn set_samplerate(&mut self, sr: f32) {
@@ -104,7 +102,7 @@ impl<S: Signal> Voice<S> {
             // If the SR is changed while a Frequency was already set
             if (self.frequency > 0.0) {
                 // Recalculate the per-sample phase modifier
-                self.fraction_frequency = self.frequency / self.samplerate as f64;
+                self.fraction_frequency = self.frequency as f64 / self.samplerate as f64;
             }
 
             debug_assert!(
@@ -118,7 +116,7 @@ impl<S: Signal> Voice<S> {
                 self.frequency,
             );
             debug_assert!(
-                self.frequency < self.samplerate as f64,
+                self.frequency < self.samplerate,
                 "frequency must be less than samplerate `{}`, got: {}",
                 self.samplerate,
                 self.frequency,
@@ -126,7 +124,7 @@ impl<S: Signal> Voice<S> {
         }
     }
 
-    pub(crate) fn set_frequency(&mut self, hz: f64) {
+    pub(crate) fn set_frequency(&mut self, hz: f32) {
         // Only update and recalculate if new Hz value is different
         if hz != self.frequency {
             // Import new center frequency
@@ -135,7 +133,7 @@ impl<S: Signal> Voice<S> {
             // If the center frequency is changed while SR was already set
             if self.samplerate > 0.0 {
                 // Recalculate the per-sample phase modifier
-                self.fraction_frequency = self.frequency / self.samplerate as f64;
+                self.fraction_frequency = self.frequency as f64 / self.samplerate as f64;
             }
 
             debug_assert!(
@@ -149,7 +147,7 @@ impl<S: Signal> Voice<S> {
                 self.frequency,
             );
             debug_assert!(
-                self.frequency < self.samplerate as f64,
+                self.frequency < self.samplerate,
                 "frequency must be less than samplerate `{}`, got: {}",
                 self.samplerate,
                 self.frequency,
@@ -174,8 +172,7 @@ impl<S: Signal> Voice<S> {
     pub(crate) fn fill(&mut self, buf: &mut Buffer) {
         for channel_samples in buf.iter_samples() {
             // Fill each sample with the next oscillator tick sample
-            self.tick();
-            let val = self.signal.gen(self.phase);
+            let val = self.tick();
             for sample in channel_samples {
                 *sample = val;
             }
@@ -187,8 +184,7 @@ impl<S: Signal> Voice<S> {
     pub(crate) fn add(&mut self, buf: &mut Buffer) {
         for channel_samples in buf.iter_samples() {
             // Fill each sample with the next oscillator tick sample
-            self.tick();
-            let val = self.signal.gen(self.phase);
+            let val = self.tick();
             for sample in channel_samples {
                 *sample += val;
             }

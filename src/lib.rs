@@ -13,6 +13,8 @@ struct SaiSampler {
 struct SaiSamplerParams {
     #[id = "gain"]
     pub gain: FloatParam,
+    #[id = "freq"]
+    pub freq: FloatParam,
 }
 
 impl Default for SaiSampler {
@@ -40,6 +42,18 @@ impl Default for SaiSamplerParams {
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            freq: FloatParam::new(
+                "Frequency",
+                440.0,
+                FloatRange::Skewed {
+                    min: 100.0,
+                    max: 20_000.0,
+                    factor: FloatRange::skew_factor(-1.0),
+                },
+            )
+            .with_smoother(SmoothingStyle::Exponential(10.0))
+            .with_value_to_string(formatters::v2s_f32_hz_then_khz(2))
+            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
         }
     }
 }
@@ -81,7 +95,7 @@ impl Plugin for SaiSampler {
         _context: &mut impl InitContext<Self>,
     ) -> bool {
         self.voice.set_samplerate(_buffer_config.sample_rate);
-        self.voice.set_frequency(440.0);
+        self.voice.set_frequency(10_000.0);
 
         true
     }
@@ -96,6 +110,9 @@ impl Plugin for SaiSampler {
         _aux: &mut AuxiliaryBuffers,
         _context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
+        let gain = self.params.gain.smoothed.next();
+        let freq = self.params.freq.smoothed.next();
+        self.voice.set_frequency(freq);
         self.voice.fill(&mut buffer);
 
         ProcessStatus::Normal
