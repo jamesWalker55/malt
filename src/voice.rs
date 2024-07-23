@@ -5,7 +5,7 @@ trait Signal {
     fn gen(&mut self, phase: f64) -> f32;
 }
 
-struct Sine;
+pub(crate) struct Sine;
 
 impl Signal for Sine {
     fn gen(&mut self, phase: f64) -> f32 {
@@ -13,7 +13,7 @@ impl Signal for Sine {
     }
 }
 
-struct Voice<S: Signal> {
+pub(crate) struct Voice<S: Signal> {
     /// Project samplerate
     samplerate: f64,
     /// Oscillator frequency

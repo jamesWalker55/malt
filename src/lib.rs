@@ -1,4 +1,4 @@
-mod rchoscillators;
+mod voice;
 
 use nih_plug::prelude::*;
 use std::sync::Arc;
