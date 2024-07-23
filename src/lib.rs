@@ -100,8 +100,8 @@ impl Plugin for SaiSampler {
 
 impl ClapPlugin for SaiSampler {
     const CLAP_ID: &'static str = "com.sai-audio.sai-sampler";
-    const CLAP_DESCRIPTION: Option<&'static str> = Some("An audio sampler");
-    const CLAP_MANUAL_URL: Option<&'static str> = Some(Self::URL);
+    const CLAP_DESCRIPTION: Option<&'static str> = None;
+    const CLAP_MANUAL_URL: Option<&'static str> = None;
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
 
     const CLAP_FEATURES: &'static [ClapFeature] = &[ClapFeature::AudioEffect, ClapFeature::Stereo];
