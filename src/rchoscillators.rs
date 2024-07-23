@@ -1,43 +1,19 @@
-/// A partial port of rchoscillators to Rust:
-/// https://github.com/rcliftonharvey/rchoscillators
-use std::cmp;
-
 use nih_plug::buffer::Buffer;
 
-/// 20 over LN10 (for volume conversion float to dB)
-const M_LN10_20: f64 = 8.6858896380650365530225783783321;
-/// LN10 over 20 (for volume conversion dB to float)
-const M_20_LN10: f64 = 0.11512925464970228420089957273422;
-/// PI ... om nom nom
-const M_PI: f64 = 3.14159265358979323846264338327950288419716939937510582;
-/// 2 * PI ... moar nom
-const M_2PI: f64 = 6.283185307179586476925286766559005768394338798750211642;
-/// 1/PI
-const M_1_PI: f64 = 0.318309886183790671537767526745028724068919291480912898;
-/// 2/PI
-const M_2_PI: f64 = 0.636619772367581343075535053490057448137838582961825795;
-/// 4/PI
-const M_4_PI: f64 = 1.27323954473516268615107010698011489627567716592365;
-/// 8 / (PI * PI)
-const M_8_PIPI: f64 = 0.81056946913870217155103570567782111123487019737797;
-
-/// Turns Decibels into float gain factor
-fn db_to_gain(db: f64) -> f32 {
-    return (db * M_20_LN10).exp() as f32;
+trait Signal {
+    /// Calculates and returns the next sample for this oscillator type.
+    fn gen(&mut self, phase: f64) -> f32;
 }
 
-/// Turns float gain factor into Decibels
-fn gain_to_db(gain: f32) -> f64 {
-    if gain < 0.0000000298023223876953125 {
-        return -150.0;
+struct Sine;
+
+impl Signal for Sine {
+    fn gen(&mut self, phase: f64) -> f32 {
+        phase.sin() as f32
     }
-
-    let dB = (gain as f64).ln() * M_LN10_20;
-
-    return dB.max(-150.0);
 }
 
-struct PhaseCounter {
+struct Voice<S: Signal> {
     /// Project samplerate
     samplerate: f64,
     /// Oscillator frequency
@@ -49,10 +25,12 @@ struct PhaseCounter {
     phase: f64,
     /// Phase start offset after oscillator was reset()
     phase_offset: f64,
+
+    signal: S,
 }
 
-impl PhaseCounter {
-    fn new(samplerate: f64, frequency: f64, phase_offset: Option<f64>) -> Self {
+impl<S: Signal> Voice<S> {
+    fn new(signal: S, samplerate: f64, frequency: f64, phase_offset: Option<f64>) -> Self {
         let phase = phase_offset.unwrap_or(0.0) % 1.0;
 
         debug_assert!(
@@ -73,6 +51,7 @@ impl PhaseCounter {
         );
 
         Self {
+            signal,
             samplerate,
             frequency,
             fraction_frequency: frequency / samplerate,
@@ -182,35 +161,30 @@ impl PhaseCounter {
             self.phase_offset = offset;
         }
     }
-}
-
-trait Generator {
-    /// Calculates and returns the next sample for this oscillator type.
-    fn tick(&mut self) -> f64;
 
     /// Fills an entire Buffer of DOUBLE samples with the same mono oscillator wave on all channels.
     /// This will overwrite any signal previously in the Buffer.
-    fn fill(&mut self, Buffer: &mut Buffer) {
-        for channel_samples in Buffer.iter_samples() {
+    fn fill(&mut self, buf: &mut Buffer) {
+        for channel_samples in buf.iter_samples() {
             // Fill each sample with the next oscillator tick sample
-            let tick = self.tick() as f32;
+            self.tick();
+            let val = self.signal.gen(self.phase);
             for sample in channel_samples {
-                *sample = tick;
+                *sample = val;
             }
         }
     }
 
     /// Adds the same mono oscillator wave to all channels of the passed Buffer of DOUBLE samples.
     /// This will keep any signal previously in the Buffer and add to it.
-    fn add(&mut self, Buffer: &mut Buffer) {
-        for channel_samples in Buffer.iter_samples() {
+    fn add(&mut self, buf: &mut Buffer) {
+        for channel_samples in buf.iter_samples() {
             // Fill each sample with the next oscillator tick sample
-            let tick = self.tick() as f32;
+            self.tick();
+            let val = self.signal.gen(self.phase);
             for sample in channel_samples {
-                *sample += tick;
+                *sample += val;
             }
         }
     }
 }
-
-struct Sine {}
