@@ -113,7 +113,14 @@ impl Plugin for SaiSampler {
         let gain = self.params.gain.smoothed.next();
         let freq = self.params.freq.smoothed.next();
         self.voice.set_frequency(freq);
-        self.voice.fill(&mut buffer);
+
+        for channel_samples in buffer.iter_samples() {
+            // Fill each sample with the next oscillator tick sample
+            let val = self.voice.tick();
+            for sample in channel_samples {
+                *sample += val * 0.2;
+            }
+        }
 
         ProcessStatus::Normal
     }

@@ -1,6 +1,4 @@
-use std::f64::consts::PI;
-
-use nih_plug::buffer::Buffer;
+use std::f64::consts::TAU;
 
 pub(crate) trait Signal {
     /// Calculates and returns the next sample for this oscillator type.
@@ -11,7 +9,7 @@ pub(crate) struct Sine;
 
 impl Signal for Sine {
     fn gen(&mut self, phase: f64) -> f32 {
-        (phase * PI * 2.0).sin() as f32
+        (phase * TAU).sin() as f32
     }
 }
 
@@ -71,7 +69,7 @@ impl<S: Signal> Voice<S> {
         self.phase = self.phase_offset;
     }
 
-    fn tick(&mut self) -> f32 {
+    pub(crate) fn tick(&mut self) -> f32 {
         // Increase phase by +1 step
         self.phase += self.fraction_frequency;
 
@@ -164,30 +162,6 @@ impl<S: Signal> Voice<S> {
         // Only update if new phase offset value is different
         if offset != self.phase_offset {
             self.phase_offset = offset;
-        }
-    }
-
-    /// Fills an entire Buffer of DOUBLE samples with the same mono oscillator wave on all channels.
-    /// This will overwrite any signal previously in the Buffer.
-    pub(crate) fn fill(&mut self, buf: &mut Buffer) {
-        for channel_samples in buf.iter_samples() {
-            // Fill each sample with the next oscillator tick sample
-            let val = self.tick();
-            for sample in channel_samples {
-                *sample = val;
-            }
-        }
-    }
-
-    /// Adds the same mono oscillator wave to all channels of the passed Buffer of DOUBLE samples.
-    /// This will keep any signal previously in the Buffer and add to it.
-    pub(crate) fn add(&mut self, buf: &mut Buffer) {
-        for channel_samples in buf.iter_samples() {
-            // Fill each sample with the next oscillator tick sample
-            let val = self.tick();
-            for sample in channel_samples {
-                *sample += val;
-            }
         }
     }
 }
