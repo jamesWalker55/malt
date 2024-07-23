@@ -37,7 +37,7 @@ fn gain_to_db(gain: f32) -> f64 {
     return dB.max(-150.0);
 }
 
-struct Skeleton {
+struct PhaseCounter {
     /// Project samplerate
     samplerate: f64,
     /// Oscillator frequency
@@ -51,27 +51,65 @@ struct Skeleton {
     phase_offset: f64,
 }
 
-impl Default for Skeleton {
-    fn default() -> Self {
+impl PhaseCounter {
+    fn new(samplerate: f64, frequency: f64, phase_offset: Option<f64>) -> Self {
+        let phase = phase_offset.unwrap_or(0.0) % 1.0;
+
+        debug_assert!(
+            samplerate > 0.0,
+            "samplerate must be positive, got: {samplerate}",
+        );
+        debug_assert!(
+            frequency > 0.0,
+            "frequency must be positive, got: {frequency}",
+        );
+        debug_assert!(
+            frequency < samplerate,
+            "frequency must be less than samplerate `{samplerate}`, got: {frequency}",
+        );
+        debug_assert!(
+            0.0 <= phase && phase <= 1.0,
+            "phase must be between 0.0 and 1.0, got: {phase}",
+        );
+
         Self {
-            samplerate: 0.0,
-            frequency: 0.0,
-            fraction_frequency: 0.0,
-            phase: 0.0,
-            phase_offset: 0.0,
+            samplerate,
+            frequency,
+            fraction_frequency: frequency / samplerate,
+            phase,
+            phase_offset: phase,
         }
     }
-}
 
-impl Skeleton {
-    /// Call this whenever the sine stream should restart, e.g. before note on etc.
-    /// Will reset state value to 0.0 and phase value to phaseOffset start value.
     fn reset(&mut self) {
         self.phase = self.phase_offset;
     }
 
-    /// Sets the oscillator sample rate in Hertz.
-    fn setSampleRate(&mut self, sr: f64) {
+    fn tick(&mut self) {
+        // Increase phase by +1 step
+        self.phase += self.fraction_frequency;
+
+        // Constrain/wrap phase value to sensible boundaries [0,1]
+        //
+        // if (phase >= 1.0)
+        // {
+        //     phase -= 1.0;
+        // }
+        // else if (phase < 0.0)
+        // {
+        //     phase += 1.0;
+        // }
+        //
+        // IF-branches are slower than simple maths in time critical code, this does the same but faster
+        self.phase +=
+            ((self.phase >= 1.0) as u8 as f64 * -1.0) + ((self.phase < 0.0) as u8 as f64 * 1.0);
+    }
+
+    fn phase(&self) -> f64 {
+        return self.phase;
+    }
+
+    fn set_samplerate(&mut self, sr: f64) {
         // Only update and recalculate if new SR value is different
         if sr != self.samplerate {
             // Import number of samples per second
@@ -83,13 +121,26 @@ impl Skeleton {
                 self.fraction_frequency = self.frequency / self.samplerate;
             }
 
-            // Revert to reset state
-            self.reset();
+            debug_assert!(
+                self.samplerate > 0.0,
+                "samplerate must be positive, got: {}",
+                self.samplerate
+            );
+            debug_assert!(
+                self.frequency > 0.0,
+                "frequency must be positive, got: {}",
+                self.frequency,
+            );
+            debug_assert!(
+                self.frequency < self.samplerate,
+                "frequency must be less than samplerate `{}`, got: {}",
+                self.samplerate,
+                self.frequency,
+            );
         }
     }
 
-    /// Sets the oscillator center frequency in Hertz.
-    fn setFrequency(&mut self, hz: f64) {
+    fn set_frequency(&mut self, hz: f64) {
         // Only update and recalculate if new Hz value is different
         if hz != self.frequency {
             // Import new center frequency
@@ -101,40 +152,35 @@ impl Skeleton {
                 self.fraction_frequency = self.frequency / self.samplerate;
             }
 
-            // Revert to reset state
-            self.reset();
+            debug_assert!(
+                self.samplerate > 0.0,
+                "samplerate must be positive, got: {}",
+                self.samplerate
+            );
+            debug_assert!(
+                self.frequency > 0.0,
+                "frequency must be positive, got: {}",
+                self.frequency,
+            );
+            debug_assert!(
+                self.frequency < self.samplerate,
+                "frequency must be less than samplerate `{}`, got: {}",
+                self.samplerate,
+                self.frequency,
+            );
         }
     }
 
-    /// Sets a phase starting offset for the oscillator.
-    /// Range is in [0,1] x 1 cycle.
-    /// This is NOT the current phase step/state value.
-    fn setPhaseOffset(&mut self, Offset: f64) {
+    fn set_phase_offset(&mut self, offset: f64) {
+        debug_assert!(
+            0.0 <= offset && offset <= 1.0,
+            "phase offset must be between 0.0 and 1.0, got: {offset}",
+        );
+
         // Only update if new phase offset value is different
-        if (Offset != self.phase_offset) {
-            self.phase_offset = Offset;
+        if offset != self.phase_offset {
+            self.phase_offset = offset;
         }
-    }
-
-    /// Returns the currently set oscillator sample rate.
-    fn getSampleRate(&self) -> f64 {
-        return self.samplerate;
-    }
-
-    /// Returns the currently set oscillator center frequency.
-    fn getFrequency(&self) -> f64 {
-        return self.frequency;
-    }
-
-    /// Returns the current oscillator phase value.
-    /// This is the actual phase step, not the reset offset.
-    fn getPhase(&self) -> f64 {
-        return self.phase;
-    }
-
-    /// Returns the current oscillator phase reset offset.
-    fn getPhaseOffset(&self) -> f64 {
-        return self.phase_offset;
     }
 }
 
@@ -166,3 +212,5 @@ trait Generator {
         }
     }
 }
+
+struct Sine {}
