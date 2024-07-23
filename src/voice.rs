@@ -1,3 +1,5 @@
+use std::f64::consts::PI;
+
 use nih_plug::buffer::Buffer;
 
 trait Signal {
@@ -9,7 +11,7 @@ pub(crate) struct Sine;
 
 impl Signal for Sine {
     fn gen(&mut self, phase: f64) -> f32 {
-        phase.sin() as f32
+        (phase * PI * 2.0).sin() as f32
     }
 }
 
