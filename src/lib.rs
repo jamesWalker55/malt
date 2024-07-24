@@ -88,6 +88,12 @@ impl Plugin for SaiSampler {
         _context: &mut impl InitContext<Self>,
     ) -> bool {
         self.sample_rate = _buffer_config.sample_rate;
+        for voice in self.voices.iter_mut() {
+            match voice {
+                Some(voice) => voice.set_samplerate(self.sample_rate),
+                None => (),
+            }
+        }
 
         true
     }
