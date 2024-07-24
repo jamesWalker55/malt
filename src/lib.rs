@@ -108,37 +108,44 @@ impl Plugin for SaiSampler {
         _aux: &mut AuxiliaryBuffers,
         ctx: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        while let Some(evt) = ctx.next_event() {
-            // TODO: Handle event timing
-            // let timing = evt.timing();
-
-            match evt {
-                NoteEvent::NoteOn { note, .. } => {
-                    self.voices[note as usize] = Some(Voice::new(
-                        osc::Saw::new(true),
-                        self.sample_rate,
-                        note as f32,
-                        None,
-                    ))
+        let mut next_event = ctx.next_event();
+        for (sample_id, channel_samples) in buffer.iter_samples().enumerate() {
+            // handle MIDI events
+            while let Some(event) = next_event {
+                if event.timing() != sample_id as u32 {
+                    break;
                 }
-                NoteEvent::NoteOff { note, .. } => self.voices[note as usize] = None,
-                NoteEvent::Choke { note, .. } => self.voices[note as usize] = None,
-                NoteEvent::MidiPitchBend { value, .. } => {
-                    // value is in range 0.0 -- 1.0
-                    for voice in self.voices.iter_mut() {
-                        match voice {
-                            Some(voice) => voice.set_pitch_offset(value * 4.0 - 2.0),
-                            None => (),
+
+                match event {
+                    NoteEvent::NoteOn { note, .. } => {
+                        self.voices[note as usize] = Some(Voice::new(
+                            osc::Saw::new(true),
+                            self.sample_rate,
+                            note as f32,
+                            None,
+                        ))
+                    }
+                    NoteEvent::NoteOff { note, .. } => self.voices[note as usize] = None,
+                    NoteEvent::Choke { note, .. } => self.voices[note as usize] = None,
+                    NoteEvent::MidiPitchBend { value, .. } => {
+                        // value is in range 0.0 -- 1.0
+                        for voice in self.voices.iter_mut() {
+                            match voice {
+                                Some(voice) => voice.set_pitch_offset(value * 4.0 - 2.0),
+                                None => (),
+                            }
                         }
                     }
+                    _ => (),
                 }
-                _ => (),
-            }
-        }
 
-        for channel_samples in buffer.iter_samples() {
+                next_event = ctx.next_event();
+            }
+
+            // update params
             let gain = self.params.gain.smoothed.next();
 
+            // processing block
             let x: f32 = self
                 .voices
                 .iter_mut()
