@@ -110,13 +110,7 @@ impl Plugin for SaiSampler {
     ) -> ProcessStatus {
         while let Some(evt) = ctx.next_event() {
             match evt {
-                NoteEvent::NoteOn {
-                    timing,
-                    voice_id,
-                    channel,
-                    note,
-                    velocity,
-                } => {
+                NoteEvent::NoteOn { note, .. } => {
                     self.voices[note as usize] = Some(Voice::new(
                         osc::Saw::new(true),
                         self.sample_rate,
@@ -124,19 +118,8 @@ impl Plugin for SaiSampler {
                         None,
                     ))
                 }
-                NoteEvent::NoteOff {
-                    timing,
-                    voice_id,
-                    channel,
-                    note,
-                    velocity,
-                } => self.voices[note as usize] = None,
-                NoteEvent::Choke {
-                    timing,
-                    voice_id,
-                    channel,
-                    note,
-                } => self.voices[note as usize] = None,
+                NoteEvent::NoteOff { note, .. } => self.voices[note as usize] = None,
+                NoteEvent::Choke { note, .. } => self.voices[note as usize] = None,
                 // NoteEvent::MidiPitchBend {
                 //     timing,
                 //     channel,
