@@ -7,23 +7,26 @@ use std::sync::Arc;
 use voice::Voice;
 
 struct SaiSampler {
+    sample_rate: f32,
     params: Arc<SaiSamplerParams>,
-    voice: Voice<osc::Saw>,
+    // 1 voice for each note
+    voices: [Option<Voice<osc::Saw>>; 128],
 }
 
 #[derive(Params)]
 struct SaiSamplerParams {
     #[id = "gain"]
     pub gain: FloatParam,
-    #[id = "freq"]
-    pub freq: FloatParam,
 }
+
+const EMPTY_VOICE: Option<Voice<osc::Saw>> = None;
 
 impl Default for SaiSampler {
     fn default() -> Self {
         Self {
+            sample_rate: 1.0,
             params: Arc::new(SaiSamplerParams::default()),
-            voice: Voice::new(osc::Saw::new(true), 100.0, 50.0, None),
+            voices: [EMPTY_VOICE; 128],
         }
     }
 }
@@ -44,18 +47,6 @@ impl Default for SaiSamplerParams {
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-            freq: FloatParam::new(
-                "Frequency",
-                440.0,
-                FloatRange::Skewed {
-                    min: 50.0,
-                    max: 10_000.0,
-                    factor: FloatRange::skew_factor(-2.0),
-                },
-            )
-            .with_smoother(SmoothingStyle::Exponential(500.0))
-            .with_value_to_string(formatters::v2s_f32_hz_then_khz(2))
-            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
         }
     }
 }
@@ -96,31 +87,70 @@ impl Plugin for SaiSampler {
         _buffer_config: &BufferConfig,
         _context: &mut impl InitContext<Self>,
     ) -> bool {
-        self.voice.set_samplerate(_buffer_config.sample_rate);
-        self.voice.set_frequency(10_000.0);
+        self.sample_rate = _buffer_config.sample_rate;
 
         true
     }
 
     fn reset(&mut self) {
-        self.voice.reset();
+        self.voices = [EMPTY_VOICE; 128];
     }
 
     fn process(
         &mut self,
-        mut buffer: &mut Buffer,
+        buffer: &mut Buffer,
         _aux: &mut AuxiliaryBuffers,
-        _context: &mut impl ProcessContext<Self>,
+        ctx: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
+        while let Some(evt) = ctx.next_event() {
+            match evt {
+                NoteEvent::NoteOn {
+                    timing,
+                    voice_id,
+                    channel,
+                    note,
+                    velocity,
+                } => {
+                    let f = 55.0 * 2.0_f64.powf((note - 33) as f64 / 12.0);
+                    self.voices[note as usize] = Some(Voice::new(
+                        osc::Saw::new(true),
+                        self.sample_rate,
+                        f as f32,
+                        None,
+                    ))
+                }
+                NoteEvent::NoteOff {
+                    timing,
+                    voice_id,
+                    channel,
+                    note,
+                    velocity,
+                } => self.voices[note as usize] = None,
+                NoteEvent::Choke {
+                    timing,
+                    voice_id,
+                    channel,
+                    note,
+                } => self.voices[note as usize] = None,
+                // NoteEvent::MidiPitchBend {
+                //     timing,
+                //     channel,
+                //     value,
+                // } => (),
+                _ => (),
+            }
+        }
+
         for channel_samples in buffer.iter_samples() {
             let gain = self.params.gain.smoothed.next();
-            let freq = self.params.freq.smoothed.next();
-            self.voice.set_frequency(freq);
 
-            // Fill each sample with the next oscillator tick sample
-            let val = self.voice.tick();
+            let x: f32 = self
+                .voices
+                .iter_mut()
+                .filter_map(|x| x.as_mut().map(|voice| voice.tick()))
+                .sum();
             for sample in channel_samples {
-                *sample += val * gain;
+                *sample += x * gain;
             }
         }
 
