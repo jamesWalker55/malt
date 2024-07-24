@@ -34,11 +34,11 @@ impl<S: Oscillator> Voice<S> {
             "frequency must be positive, got: {frequency}",
         );
         debug_assert!(
-            frequency < samplerate.into(),
+            frequency < samplerate,
             "frequency must be less than samplerate `{samplerate}`, got: {frequency}",
         );
         debug_assert!(
-            0.0 <= phase && phase <= 1.0,
+            (0.0..=1.0).contains(&phase),
             "phase must be between 0.0 and 1.0, got: {phase}",
         );
 
@@ -85,7 +85,7 @@ impl<S: Oscillator> Voice<S> {
             self.samplerate = sr;
 
             // If the SR is changed while a Frequency was already set
-            if (self.frequency > 0.0) {
+            if self.frequency > 0.0 {
                 // Recalculate the per-sample phase modifier
                 self.fraction_frequency = self.frequency as f64 / self.samplerate as f64;
             }
@@ -142,7 +142,7 @@ impl<S: Oscillator> Voice<S> {
 
     pub(crate) fn set_phase_offset(&mut self, offset: f64) {
         debug_assert!(
-            0.0 <= offset && offset <= 1.0,
+            (0.0..=1.0).contains(&offset),
             "phase offset must be between 0.0 and 1.0, got: {offset}",
         );
 
