@@ -117,11 +117,10 @@ impl Plugin for SaiSampler {
                     note,
                     velocity,
                 } => {
-                    let f = 55.0 * 2.0_f64.powf((note - 33) as f64 / 12.0);
                     self.voices[note as usize] = Some(Voice::new(
                         osc::Saw::new(true),
                         self.sample_rate,
-                        f as f32,
+                        note as f32,
                         None,
                     ))
                 }

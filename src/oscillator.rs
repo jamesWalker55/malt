@@ -1,15 +1,15 @@
-use std::f64::consts::TAU;
+use std::f32::consts::TAU;
 
 pub(crate) trait Oscillator {
     /// Calculates and returns the next sample for this oscillator type.
     /// `phase` is in range 0.0 - 1.0
-    fn level(&mut self, phase: f64) -> f64;
+    fn level(&mut self, phase: f32) -> f32;
 }
 
 pub(crate) struct Sine;
 
 impl Oscillator for Sine {
-    fn level(&mut self, phase: f64) -> f64 {
+    fn level(&mut self, phase: f32) -> f32 {
         (phase * TAU).sin()
     }
 }
@@ -17,7 +17,7 @@ impl Oscillator for Sine {
 pub(crate) struct Triangle;
 
 impl Oscillator for Triangle {
-    fn level(&mut self, phase: f64) -> f64 {
+    fn level(&mut self, phase: f32) -> f32 {
         if phase < 0.5 {
             4.0 * phase - 1.0
         } else {
@@ -27,7 +27,7 @@ impl Oscillator for Triangle {
 }
 
 pub(crate) struct Saw {
-    multiplier: f64,
+    multiplier: f32,
 }
 
 impl Saw {
@@ -41,7 +41,7 @@ impl Saw {
 }
 
 impl Oscillator for Saw {
-    fn level(&mut self, phase: f64) -> f64 {
+    fn level(&mut self, phase: f32) -> f32 {
         ((phase * 2.0) - 1.0) * self.multiplier
     }
 }
@@ -49,7 +49,7 @@ impl Oscillator for Saw {
 pub(crate) struct Square;
 
 impl Oscillator for Square {
-    fn level(&mut self, phase: f64) -> f64 {
+    fn level(&mut self, phase: f32) -> f32 {
         if phase < 0.5 {
             -1.0
         } else {
@@ -59,17 +59,17 @@ impl Oscillator for Square {
 }
 
 pub(crate) struct Pulse {
-    width: f64,
+    width: f32,
 }
 
 impl Pulse {
-    pub(crate) fn new(width: f64) -> Self {
+    pub(crate) fn new(width: f32) -> Self {
         Self { width }
     }
 }
 
 impl Oscillator for Pulse {
-    fn level(&mut self, phase: f64) -> f64 {
+    fn level(&mut self, phase: f32) -> f32 {
         if phase < self.width {
             -1.0
         } else {
