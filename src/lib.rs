@@ -109,6 +109,9 @@ impl Plugin for SaiSampler {
         ctx: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         while let Some(evt) = ctx.next_event() {
+            // TODO: Handle event timing
+            // let timing = evt.timing();
+
             match evt {
                 NoteEvent::NoteOn { note, .. } => {
                     self.voices[note as usize] = Some(Voice::new(
@@ -120,11 +123,15 @@ impl Plugin for SaiSampler {
                 }
                 NoteEvent::NoteOff { note, .. } => self.voices[note as usize] = None,
                 NoteEvent::Choke { note, .. } => self.voices[note as usize] = None,
-                // NoteEvent::MidiPitchBend {
-                //     timing,
-                //     channel,
-                //     value,
-                // } => (),
+                NoteEvent::MidiPitchBend { value, .. } => {
+                    // value is in range 0.0 -- 1.0
+                    for voice in self.voices.iter_mut() {
+                        match voice {
+                            Some(voice) => voice.set_pitch_offset(value * 4.0 - 2.0),
+                            None => (),
+                        }
+                    }
+                }
                 _ => (),
             }
         }
