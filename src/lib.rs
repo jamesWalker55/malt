@@ -10,7 +10,7 @@ struct SaiSampler {
     sample_rate: f32,
     params: Arc<SaiSamplerParams>,
     // 1 voice for each note
-    voices: [Option<Voice<osc::Saw>>; 128],
+    voices: [Option<Voice<osc::Sine>>; 128],
 }
 
 #[derive(Params)]
@@ -19,7 +19,7 @@ struct SaiSamplerParams {
     pub gain: FloatParam,
 }
 
-const EMPTY_VOICE: Option<Voice<osc::Saw>> = None;
+const EMPTY_VOICE: Option<Voice<osc::Sine>> = None;
 
 impl Default for SaiSampler {
     fn default() -> Self {
@@ -119,7 +119,7 @@ impl Plugin for SaiSampler {
                 match event {
                     NoteEvent::NoteOn { note, .. } => {
                         self.voices[note as usize] = Some(Voice::new(
-                            osc::Saw::new(true),
+                            osc::Sine,
                             self.sample_rate,
                             note as f32,
                             None,
