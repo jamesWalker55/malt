@@ -83,9 +83,11 @@ impl Default for SaiSamplerParams {
             release: FloatParam::new(
                 "Release",
                 100.0,
-                FloatRange::Linear {
-                    min: 0.0,
-                    max: 1000.0,
+                // these settings are similar to FabFilter Pro-C's release
+                FloatRange::Skewed {
+                    min: 10.0,
+                    max: 2500.0,
+                    factor: FloatRange::skew_factor(-1.6),
                 },
             )
             .with_unit(" ms"),
