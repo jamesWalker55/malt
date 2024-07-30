@@ -26,12 +26,6 @@ struct SaiSampler {
     env_filter: ButterworthLPF,
 }
 
-#[derive(Params)]
-struct SaiSamplerParams {
-    #[id = "gain"]
-    pub gain: FloatParam,
-}
-
 impl Default for SaiSampler {
     fn default() -> Self {
         Self {
@@ -49,6 +43,12 @@ impl Default for SaiSampler {
             env_filter: ButterworthLPF::new(0.0, 0.0),
         }
     }
+}
+
+#[derive(Params)]
+struct SaiSamplerParams {
+    #[id = "gain"]
+    pub gain: FloatParam,
 }
 
 impl Default for SaiSamplerParams {
