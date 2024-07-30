@@ -7,12 +7,12 @@ use filters::{ButterworthLPF, LinkwitzRileyHPF, LinkwitzRileyLPF};
 use nih_plug::prelude::*;
 use std::sync::Arc;
 
-type Filter = LinkwitzRileyHPF;
-
 struct SaiSampler {
     params: Arc<SaiSamplerParams>,
-    filter_l: Filter,
-    filter_r: Filter,
+    lpf_l: LinkwitzRileyLPF,
+    lpf_r: LinkwitzRileyLPF,
+    hpf_l: LinkwitzRileyHPF,
+    hpf_r: LinkwitzRileyHPF,
 }
 
 #[derive(Params)]
@@ -28,8 +28,10 @@ impl Default for SaiSampler {
             // - Samplerate: 44100 Hz
             // - Freq: 600 Hz
             // - Q: 0.707 (Fixed)
-            filter_l: Filter::new(600.0, 44100.0),
-            filter_r: Filter::new(600.0, 44100.0),
+            lpf_l: LinkwitzRileyLPF::new(1000.0, 44100.0),
+            lpf_r: LinkwitzRileyLPF::new(1000.0, 44100.0),
+            hpf_l: LinkwitzRileyHPF::new(1000.0, 44100.0),
+            hpf_r: LinkwitzRileyHPF::new(1000.0, 44100.0),
         }
     }
 }
@@ -103,23 +105,28 @@ impl Plugin for SaiSampler {
     ) -> ProcessStatus {
         debug_assert_eq!(buffer.channels(), 2);
 
-        for (sample_idx, channel_samples) in buffer.iter_samples().enumerate() {
+        for mut channel_samples in buffer.iter_samples() {
             // update params
             let gain = self.params.gain.smoothed.next();
-            self.filter_l.set_frequency(gain as f64);
-            self.filter_r.set_frequency(gain as f64);
+            self.lpf_l.set_frequency(gain as f64);
+            self.lpf_r.set_frequency(gain as f64);
+            self.hpf_l.set_frequency(gain as f64);
+            self.hpf_r.set_frequency(gain as f64);
 
-            for (channel_idx, sample) in channel_samples.into_iter().enumerate() {
-                match channel_idx {
-                    0 => {
-                        *sample = self.filter_l.process_sample(*sample as f64) as f32;
-                    }
-                    1 => {
-                        *sample = self.filter_r.process_sample(*sample as f64) as f32;
-                    }
-                    _ => unreachable!("only 2 channels as input is supported"),
-                    // _ => (),
-                }
+            // left channel
+            {
+                let sample = channel_samples.get_mut(0).unwrap();
+                let hpf_sample = self.hpf_l.process_sample(*sample as f64);
+                let lpf_sample = self.lpf_l.process_sample(*sample as f64);
+                *sample = (lpf_sample - hpf_sample) as f32;
+            }
+
+            // right channel
+            {
+                let sample = channel_samples.get_mut(1).unwrap();
+                let hpf_sample = self.hpf_r.process_sample(*sample as f64);
+                let lpf_sample = self.lpf_r.process_sample(*sample as f64);
+                *sample = (lpf_sample - hpf_sample) as f32;
             }
         }
 
