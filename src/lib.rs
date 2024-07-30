@@ -49,6 +49,10 @@ impl Default for SaiSampler {
 struct SaiSamplerParams {
     #[id = "gain"]
     pub gain: FloatParam,
+    #[id = "attack"]
+    pub attack: FloatParam,
+    #[id = "release"]
+    pub release: FloatParam,
 }
 
 impl Default for SaiSamplerParams {
@@ -67,6 +71,24 @@ impl Default for SaiSamplerParams {
             .with_unit(" Hz"),
             // .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             // .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            attack: FloatParam::new(
+                "Attack",
+                10.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 10.0,
+                },
+            )
+            .with_unit(" ms"),
+            release: FloatParam::new(
+                "Release",
+                100.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 1000.0,
+                },
+            )
+            .with_unit(" ms"),
         }
     }
 }
@@ -150,6 +172,13 @@ impl Plugin for SaiSampler {
         let mut next_event = ctx.next_event();
 
         for (sample_id, mut channel_samples) in buffer.iter_samples().enumerate() {
+            // update params
+            let gain = self.params.gain.smoothed.next();
+            let attack = self.params.attack.smoothed.next() / 1000.0;
+            let release = self.params.release.smoothed.next() / 1000.0;
+
+            debug_assert!(attack <= self.latency_seconds);
+
             // handle MIDI events
             while let Some(event) = next_event {
                 if event.timing() != sample_id as u32 {
@@ -158,7 +187,12 @@ impl Plugin for SaiSampler {
 
                 match event {
                     NoteEvent::NoteOn { note, .. } => {
-                        self.env = Some(Envelope::new(self.sr, self.latency_seconds, 0.0, 0.25));
+                        self.env = Some(Envelope::new(
+                            self.sr,
+                            self.latency_seconds - attack,
+                            attack,
+                            release,
+                        ));
                     }
                     // NoteEvent::NoteOff { note, .. } => (),
                     // NoteEvent::Choke { note, .. } => (),
@@ -169,8 +203,10 @@ impl Plugin for SaiSampler {
                 next_event = ctx.next_event();
             }
 
-            // update params
-            let gain = self.params.gain.smoothed.next();
+            // update existing envelopes (if any)
+            if let Some(env) = &mut self.env {
+                env.set_release(release);
+            }
 
             // update filter frequency
             self.lpf_l.set_frequency(gain as Precision);
@@ -227,7 +263,7 @@ impl Plugin for SaiSampler {
             };
             let env_filtered_val = self.env_filter.process_sample(env_val as Precision);
             for sample in channel_samples {
-                *sample = *sample * db_to_gain(env_filtered_val as f32 * -6.0);
+                *sample = *sample * env_filtered_val as f32;
             }
         }
 

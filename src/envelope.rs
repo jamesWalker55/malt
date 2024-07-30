@@ -38,8 +38,12 @@ impl Envelope {
 
     /// Update the release duration of the envelope (in seconds).
     /// If the envelope is already releasing, only the remaining duration will be affected.
-    fn set_release(&mut self, mut release: f32) {
+    pub(crate) fn set_release(&mut self, mut release: f32) {
         if self.release_remaining <= 0.0 {
+            return;
+        }
+
+        if release == self.release {
             return;
         }
 
@@ -54,11 +58,11 @@ impl Envelope {
         self.release = release;
     }
 
-    fn is_complete(&self) -> bool {
+    pub(crate) fn is_complete(&self) -> bool {
         self.delay_remaining <= 0.0 && self.attack_remaining <= 0.0 && self.release_remaining <= 0.0
     }
 
-    fn duration_samples(&self) -> f32 {
+    pub(crate) fn duration_samples(&self) -> f32 {
         self.delay + self.attack + self.release
     }
 
