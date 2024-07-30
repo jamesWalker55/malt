@@ -12,7 +12,7 @@ use nih_plug::{buffer::ChannelSamples, prelude::*};
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use std::sync::Arc;
-use util::db_to_gain;
+use util::{db_to_gain, gain_to_db};
 
 struct SaiSampler {
     params: Arc<SaiSamplerParams>,
@@ -49,6 +49,8 @@ impl Default for SaiSampler {
 
 #[derive(Params)]
 struct SaiSamplerParams {
+    #[id = "gain_reduction"]
+    pub gain_reduction: FloatParam,
     #[id = "precomp"]
     pub precomp: FloatParam,
     #[id = "release"]
@@ -62,6 +64,18 @@ struct SaiSamplerParams {
 impl Default for SaiSamplerParams {
     fn default() -> Self {
         Self {
+            gain_reduction: FloatParam::new(
+                "Gain Reduction",
+                db_to_gain(-30.0),
+                FloatRange::Skewed {
+                    min: 0.0,
+                    max: 1.0,
+                    factor: FloatRange::skew_factor(-1.2),
+                },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             precomp: FloatParam::new(
                 "Precomp",
                 10.0,
@@ -191,6 +205,7 @@ impl Plugin for SaiSampler {
 
         for (sample_id, mut channel_samples) in buffer.iter_samples().enumerate() {
             // update params
+            let gain_reduction_db = gain_to_db(self.params.gain_reduction.smoothed.next());
             let precomp = self.params.precomp.smoothed.next() / 1000.0;
             let release = self.params.release.smoothed.next() / 1000.0;
             let low_crossover = self.params.low_crossover.smoothed.next();
@@ -282,7 +297,8 @@ impl Plugin for SaiSampler {
             };
             env_val = self.env_filter.process_sample(env_val as Precision) as f32;
             for sample in channel_samples {
-                *sample = *sample * env_val as f32;
+                *sample = *sample * db_to_gain((env_val as f32) * gain_reduction_db);
+                // *sample = *sample * env_val as f32;
             }
         }
 
