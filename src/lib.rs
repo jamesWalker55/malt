@@ -43,12 +43,13 @@ impl Default for SaiSamplerParams {
             gain: FloatParam::new(
                 "Gain",
                 600.0,
-                FloatRange::Linear {
+                FloatRange::Skewed {
                     min: 10.0,
                     max: 20000.0,
+                    factor: FloatRange::skew_factor(-2.0),
                 },
             )
-            .with_smoother(SmoothingStyle::Logarithmic(20.0))
+            // .with_smoother(SmoothingStyle::Exponential(10.0))
             .with_unit(" Hz"),
             // .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             // .with_string_to_value(formatters::s2v_f32_gain_to_db()),
