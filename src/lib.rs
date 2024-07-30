@@ -5,7 +5,8 @@ mod voice;
 
 use biquad::Precision;
 use filters::{ButterworthLPF, LinkwitzRileyHPF, LinkwitzRileyLPF};
-use nih_plug::prelude::*;
+use nih_plug::{buffer::ChannelSamples, prelude::*};
+use ringbuffer::{AllocRingBuffer, RingBuffer};
 use std::sync::Arc;
 
 struct SaiSampler {
@@ -14,6 +15,7 @@ struct SaiSampler {
     lpf_r: LinkwitzRileyLPF,
     hpf_l: LinkwitzRileyHPF,
     hpf_r: LinkwitzRileyHPF,
+    buf: AllocRingBuffer<f32>,
 }
 
 #[derive(Params)]
@@ -33,6 +35,7 @@ impl Default for SaiSampler {
             lpf_r: LinkwitzRileyLPF::new(1000.0, 44100.0),
             hpf_l: LinkwitzRileyHPF::new(1000.0, 44100.0),
             hpf_r: LinkwitzRileyHPF::new(1000.0, 44100.0),
+            buf: AllocRingBuffer::new(1),
         }
     }
 }
@@ -93,6 +96,14 @@ impl Plugin for SaiSampler {
         _buffer_config: &BufferConfig,
         _context: &mut impl InitContext<Self>,
     ) -> bool {
+        const LATENCY_SECONDS: f32 = 0.01;
+        let latency_samples = (LATENCY_SECONDS * _buffer_config.sample_rate).round() as u32;
+        _context.set_latency_samples(latency_samples);
+
+        // times 2 for 2 channels
+        self.buf = AllocRingBuffer::new((latency_samples * 2).try_into().unwrap());
+        self.buf.fill(0.0);
+
         true
     }
 
@@ -109,6 +120,8 @@ impl Plugin for SaiSampler {
         for mut channel_samples in buffer.iter_samples() {
             // update params
             let gain = self.params.gain.smoothed.next();
+
+            // update filter frequency
             self.lpf_l.set_frequency(gain as Precision);
             self.lpf_r.set_frequency(gain as Precision);
             self.hpf_l.set_frequency(gain as Precision);
@@ -117,16 +130,34 @@ impl Plugin for SaiSampler {
             // left channel
             {
                 let sample = channel_samples.get_mut(0).unwrap();
-                let hpf_sample = self.hpf_l.process_sample(*sample as Precision);
-                let lpf_sample = self.lpf_l.process_sample(*sample as Precision);
+
+                // the sample from eons ago (the latency)
+                let delayed_sample = *self.buf.get(0).unwrap();
+                // push sample to buffer queue
+                self.buf.push(*sample);
+
+                // process delayed sample
+                let hpf_sample = self.hpf_l.process_sample(delayed_sample as Precision);
+                let lpf_sample = self.lpf_l.process_sample(delayed_sample as Precision);
+
+                // return to sender
                 *sample = (lpf_sample - hpf_sample) as f32;
             }
 
             // right channel
             {
                 let sample = channel_samples.get_mut(1).unwrap();
-                let hpf_sample = self.hpf_r.process_sample(*sample as Precision);
-                let lpf_sample = self.lpf_r.process_sample(*sample as Precision);
+
+                // the sample from eons ago (the latency)
+                let delayed_sample = *self.buf.get(0).unwrap();
+                // push sample to buffer queue
+                self.buf.push(*sample);
+
+                // process delayed sample
+                let hpf_sample = self.hpf_r.process_sample(delayed_sample as Precision);
+                let lpf_sample = self.lpf_r.process_sample(delayed_sample as Precision);
+
+                // return to sender
                 *sample = (lpf_sample - hpf_sample) as f32;
             }
         }
