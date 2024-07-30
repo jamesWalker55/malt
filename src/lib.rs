@@ -3,17 +3,16 @@ mod filters;
 mod oscillator;
 mod voice;
 
-use biquad::Biquad;
-use filters::ButterworthLPF;
+use filters::{ButterworthLPF, LinkwitzRileyLPF};
 use nih_plug::prelude::*;
-use oscillator as osc;
 use std::sync::Arc;
-use voice::Voice;
+
+type Filter = LinkwitzRileyLPF;
 
 struct SaiSampler {
     params: Arc<SaiSamplerParams>,
-    filter_l: ButterworthLPF,
-    filter_r: ButterworthLPF,
+    filter_l: Filter,
+    filter_r: Filter,
 }
 
 #[derive(Params)]
@@ -22,8 +21,6 @@ struct SaiSamplerParams {
     pub gain: FloatParam,
 }
 
-const EMPTY_VOICE: Option<Voice<osc::Sine>> = None;
-
 impl Default for SaiSampler {
     fn default() -> Self {
         Self {
@@ -31,8 +28,8 @@ impl Default for SaiSampler {
             // - Samplerate: 44100 Hz
             // - Freq: 600 Hz
             // - Q: 0.707 (Fixed)
-            filter_l: ButterworthLPF::new(600.0, 44100.0),
-            filter_r: ButterworthLPF::new(600.0, 44100.0),
+            filter_l: Filter::new(600.0, 44100.0),
+            filter_r: Filter::new(600.0, 44100.0),
         }
     }
 }
