@@ -153,8 +153,8 @@ impl Plugin for SaiSampler {
         // clear envelope
         self.env = None;
         // a filter to smooth the envelope
-        // at 1000Hz it smoothes for about 1ms
-        self.env_filter = ButterworthLPF::new(1000.0, self.sr.into());
+        // at 600Hz it settles in about 2ms
+        self.env_filter = ButterworthLPF::new(600.0, self.sr.into());
 
         true
     }
