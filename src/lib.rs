@@ -207,7 +207,6 @@ impl Plugin for SaiSampler {
 
             // update existing envelopes (if any)
             if let Some(env) = &mut self.env {
-                env.set_attack(attack);
                 env.set_release(release);
             }
 
