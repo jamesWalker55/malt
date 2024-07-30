@@ -1,9 +1,11 @@
 mod biquad;
+mod envelope;
 mod filters;
 mod oscillator;
 mod voice;
 
 use biquad::Precision;
+use envelope::Envelope;
 use filters::{ButterworthLPF, LinkwitzRileyHPF, LinkwitzRileyLPF};
 use nih_plug::{buffer::ChannelSamples, prelude::*};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
@@ -11,11 +13,15 @@ use std::sync::Arc;
 
 struct SaiSampler {
     params: Arc<SaiSamplerParams>,
+    sr: f32,
+    latency_seconds: f32,
+    latency_samples: u32,
     lpf_l: LinkwitzRileyLPF,
     lpf_r: LinkwitzRileyLPF,
     hpf_l: LinkwitzRileyHPF,
     hpf_r: LinkwitzRileyHPF,
     buf: AllocRingBuffer<f32>,
+    env: Option<Envelope>,
 }
 
 #[derive(Params)]
@@ -28,6 +34,9 @@ impl Default for SaiSampler {
     fn default() -> Self {
         Self {
             params: Arc::new(SaiSamplerParams::default()),
+            sr: 0.0,
+            latency_seconds: 0.0,
+            latency_samples: 0,
             // - Samplerate: 44100 Hz
             // - Freq: 600 Hz
             // - Q: 0.707 (Fixed)
@@ -36,6 +45,7 @@ impl Default for SaiSampler {
             hpf_l: LinkwitzRileyHPF::new(1000.0, 44100.0),
             hpf_r: LinkwitzRileyHPF::new(1000.0, 44100.0),
             buf: AllocRingBuffer::new(1),
+            env: None,
         }
     }
 }
@@ -96,13 +106,29 @@ impl Plugin for SaiSampler {
         _buffer_config: &BufferConfig,
         _context: &mut impl InitContext<Self>,
     ) -> bool {
+        self.sr = _buffer_config.sample_rate;
+
+        // report latency
         const LATENCY_SECONDS: f32 = 0.01;
-        let latency_samples = (LATENCY_SECONDS * _buffer_config.sample_rate).round() as u32;
-        _context.set_latency_samples(latency_samples);
+        self.latency_seconds = LATENCY_SECONDS;
+        self.latency_samples = (LATENCY_SECONDS * self.sr).round() as u32;
+        _context.set_latency_samples(self.latency_samples);
 
         // times 2 for 2 channels
-        self.buf = AllocRingBuffer::new((latency_samples * 2).try_into().unwrap());
-        self.buf.fill(0.0);
+        self.buf = {
+            let mut buf = AllocRingBuffer::new((self.latency_samples * 2).try_into().unwrap());
+            buf.fill(0.0);
+            buf
+        };
+
+        // setup filters
+        self.lpf_l = LinkwitzRileyLPF::new(1000.0, self.sr.into());
+        self.lpf_r = LinkwitzRileyLPF::new(1000.0, self.sr.into());
+        self.hpf_l = LinkwitzRileyHPF::new(1000.0, self.sr.into());
+        self.hpf_r = LinkwitzRileyHPF::new(1000.0, self.sr.into());
+
+        // clear envelope
+        self.env = None;
 
         true
     }
@@ -117,7 +143,28 @@ impl Plugin for SaiSampler {
     ) -> ProcessStatus {
         debug_assert_eq!(buffer.channels(), 2);
 
-        for mut channel_samples in buffer.iter_samples() {
+        let mut next_event = ctx.next_event();
+
+        for (sample_id, mut channel_samples) in buffer.iter_samples().enumerate() {
+            // handle MIDI events
+            while let Some(event) = next_event {
+                if event.timing() != sample_id as u32 {
+                    break;
+                }
+
+                match event {
+                    NoteEvent::NoteOn { note, .. } => {
+                        self.env = Some(Envelope::new(self.sr, self.latency_seconds, 0.0, 0.25));
+                    }
+                    // NoteEvent::NoteOff { note, .. } => (),
+                    // NoteEvent::Choke { note, .. } => (),
+                    // NoteEvent::MidiPitchBend { value, .. } => (),
+                    _ => (),
+                }
+
+                next_event = ctx.next_event();
+            }
+
             // update params
             let gain = self.params.gain.smoothed.next();
 
@@ -159,6 +206,26 @@ impl Plugin for SaiSampler {
 
                 // return to sender
                 *sample = (lpf_sample - hpf_sample) as f32;
+            }
+
+            // test process envelope
+            if let Some(env) = &mut self.env {
+                let x = env.tick();
+                if let Some(x) = x {
+                    for sample in channel_samples {
+                        *sample = *sample * x;
+                    }
+                } else {
+                    // envelope has ended
+                    self.env = None;
+                    for sample in channel_samples {
+                        *sample = 0.0;
+                    }
+                }
+            } else {
+                for sample in channel_samples {
+                    *sample = 0.0;
+                }
             }
         }
 
