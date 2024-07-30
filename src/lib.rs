@@ -2,12 +2,14 @@ mod biquad;
 mod envelope;
 mod filters;
 mod oscillator;
+mod parameter_formatters;
 mod voice;
 
 use biquad::Precision;
 use envelope::Envelope;
 use filters::{ButterworthLPF, FirstOrderLPF, LinkwitzRileyHPF, LinkwitzRileyLPF};
 use nih_plug::{buffer::ChannelSamples, prelude::*};
+use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use std::sync::Arc;
 use util::db_to_gain;
@@ -68,7 +70,8 @@ impl Default for SaiSamplerParams {
                     max: 10.0,
                 },
             )
-            .with_unit(" ms"),
+            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_string_to_value(s2v_f32_ms_then_s()),
             release: FloatParam::new(
                 "Release",
                 100.0,
@@ -79,7 +82,8 @@ impl Default for SaiSamplerParams {
                     factor: FloatRange::skew_factor(-1.6),
                 },
             )
-            .with_unit(" ms"),
+            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_string_to_value(s2v_f32_ms_then_s()),
             low_crossover: FloatParam::new(
                 "Low Crossover",
                 120.0,
@@ -89,10 +93,8 @@ impl Default for SaiSamplerParams {
                     factor: FloatRange::skew_factor(-2.0),
                 },
             )
-            // .with_smoother(SmoothingStyle::Exponential(10.0))
-            .with_unit(" Hz"),
-            // .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            // .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
+            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
             high_crossover: FloatParam::new(
                 "High Crossover",
                 2500.0,
@@ -102,10 +104,8 @@ impl Default for SaiSamplerParams {
                     factor: FloatRange::skew_factor(-2.0),
                 },
             )
-            // .with_smoother(SmoothingStyle::Exponential(10.0))
-            .with_unit(" Hz"),
-            // .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            // .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
+            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
         }
     }
 }
