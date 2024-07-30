@@ -45,7 +45,7 @@ impl Default for SaiSamplerParams {
         Self {
             gain: FloatParam::new(
                 "Gain",
-                600.0,
+                1000.0,
                 FloatRange::Skewed {
                     min: 10.0,
                     max: 20000.0,
