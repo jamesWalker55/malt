@@ -1,3 +1,4 @@
+mod biquad;
 mod oscillator;
 mod voice;
 
