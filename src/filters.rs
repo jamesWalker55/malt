@@ -33,6 +33,10 @@ impl ButterworthLPF {
     }
 
     pub(crate) fn set_fc(&mut self, fc: Precision) {
+        if fc == self.fc {
+            return;
+        }
+
         self.fc = fc;
         let coeffs = Self::coefficients(fc, self.fs);
         self.biquad
@@ -40,6 +44,10 @@ impl ButterworthLPF {
     }
 
     pub(crate) fn set_fs(&mut self, fs: Precision) {
+        if fs == self.fs {
+            return;
+        }
+
         self.fs = fs;
         let coeffs = Self::coefficients(self.fc, fs);
         self.biquad

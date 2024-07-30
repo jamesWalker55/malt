@@ -42,17 +42,16 @@ impl Default for SaiSamplerParams {
         Self {
             gain: FloatParam::new(
                 "Gain",
-                util::db_to_gain(0.0),
-                FloatRange::Skewed {
-                    min: util::db_to_gain(-60.0),
-                    max: util::db_to_gain(0.0),
-                    factor: FloatRange::gain_skew_factor(-60.0, 0.0),
+                600.0,
+                FloatRange::Linear {
+                    min: 10.0,
+                    max: 20000.0,
                 },
             )
             .with_smoother(SmoothingStyle::Logarithmic(20.0))
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            .with_unit(" Hz"),
+            // .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            // .with_string_to_value(formatters::s2v_f32_gain_to_db()),
         }
     }
 }
@@ -109,6 +108,8 @@ impl Plugin for SaiSampler {
         for (sample_idx, channel_samples) in buffer.iter_samples().enumerate() {
             // update params
             let gain = self.params.gain.smoothed.next();
+            self.filter_l.set_fc(gain as f64);
+            self.filter_r.set_fc(gain as f64);
 
             for (channel_idx, sample) in channel_samples.into_iter().enumerate() {
                 match channel_idx {
