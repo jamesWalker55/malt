@@ -10,6 +10,7 @@ use filters::{ButterworthLPF, LinkwitzRileyHPF, LinkwitzRileyLPF};
 use nih_plug::{buffer::ChannelSamples, prelude::*};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use std::sync::Arc;
+use util::db_to_gain;
 
 struct SaiSampler {
     params: Arc<SaiSamplerParams>,
@@ -22,6 +23,7 @@ struct SaiSampler {
     hpf_r: LinkwitzRileyHPF,
     buf: AllocRingBuffer<f32>,
     env: Option<Envelope>,
+    env_filter: ButterworthLPF,
 }
 
 #[derive(Params)]
@@ -34,18 +36,17 @@ impl Default for SaiSampler {
     fn default() -> Self {
         Self {
             params: Arc::new(SaiSamplerParams::default()),
+            // these fields are not initialised here, see `initialize()` for the actual values
             sr: 0.0,
             latency_seconds: 0.0,
             latency_samples: 0,
-            // - Samplerate: 44100 Hz
-            // - Freq: 600 Hz
-            // - Q: 0.707 (Fixed)
-            lpf_l: LinkwitzRileyLPF::new(1000.0, 44100.0),
-            lpf_r: LinkwitzRileyLPF::new(1000.0, 44100.0),
-            hpf_l: LinkwitzRileyHPF::new(1000.0, 44100.0),
-            hpf_r: LinkwitzRileyHPF::new(1000.0, 44100.0),
+            lpf_l: LinkwitzRileyLPF::new(0.0, 0.0),
+            lpf_r: LinkwitzRileyLPF::new(0.0, 0.0),
+            hpf_l: LinkwitzRileyHPF::new(0.0, 0.0),
+            hpf_r: LinkwitzRileyHPF::new(0.0, 0.0),
             buf: AllocRingBuffer::new(1),
             env: None,
+            env_filter: ButterworthLPF::new(0.0, 0.0),
         }
     }
 }
@@ -129,6 +130,9 @@ impl Plugin for SaiSampler {
 
         // clear envelope
         self.env = None;
+        // a filter to smooth the envelope
+        // at 1000Hz it smoothes for about 1ms
+        self.env_filter = ButterworthLPF::new(1000.0, self.sr.into());
 
         true
     }
@@ -209,23 +213,21 @@ impl Plugin for SaiSampler {
             }
 
             // test process envelope
-            if let Some(env) = &mut self.env {
+            let env_val = if let Some(env) = &mut self.env {
                 let x = env.tick();
                 if let Some(x) = x {
-                    for sample in channel_samples {
-                        *sample = *sample * x;
-                    }
+                    x
                 } else {
                     // envelope has ended
                     self.env = None;
-                    for sample in channel_samples {
-                        *sample = 0.0;
-                    }
+                    0.0
                 }
             } else {
-                for sample in channel_samples {
-                    *sample = 0.0;
-                }
+                0.0
+            };
+            let env_filtered_val = self.env_filter.process_sample(env_val as Precision);
+            for sample in channel_samples {
+                *sample = *sample * db_to_gain(env_filtered_val as f32 * -6.0);
             }
         }
 
