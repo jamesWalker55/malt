@@ -6,7 +6,7 @@ mod voice;
 
 use biquad::Precision;
 use envelope::Envelope;
-use filters::{ButterworthLPF, LinkwitzRileyHPF, LinkwitzRileyLPF, FirstOrderLPF};
+use filters::{ButterworthLPF, FirstOrderLPF, LinkwitzRileyHPF, LinkwitzRileyLPF};
 use nih_plug::{buffer::ChannelSamples, prelude::*};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use std::sync::Arc;
@@ -47,32 +47,21 @@ impl Default for SaiSampler {
 
 #[derive(Params)]
 struct SaiSamplerParams {
-    #[id = "gain"]
-    pub gain: FloatParam,
-    #[id = "attack"]
-    pub attack: FloatParam,
+    #[id = "precomp"]
+    pub precomp: FloatParam,
     #[id = "release"]
     pub release: FloatParam,
+    #[id = "low_crossover"]
+    pub low_crossover: FloatParam,
+    #[id = "high_crossover"]
+    pub high_crossover: FloatParam,
 }
 
 impl Default for SaiSamplerParams {
     fn default() -> Self {
         Self {
-            gain: FloatParam::new(
-                "Gain",
-                1000.0,
-                FloatRange::Skewed {
-                    min: 10.0,
-                    max: 20000.0,
-                    factor: FloatRange::skew_factor(-2.0),
-                },
-            )
-            // .with_smoother(SmoothingStyle::Exponential(10.0))
-            .with_unit(" Hz"),
-            // .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            // .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-            attack: FloatParam::new(
-                "Attack",
+            precomp: FloatParam::new(
+                "Precomp",
                 10.0,
                 FloatRange::Linear {
                     min: 0.0,
@@ -91,6 +80,32 @@ impl Default for SaiSamplerParams {
                 },
             )
             .with_unit(" ms"),
+            low_crossover: FloatParam::new(
+                "Low Crossover",
+                120.0,
+                FloatRange::Skewed {
+                    min: 10.0,
+                    max: 20000.0,
+                    factor: FloatRange::skew_factor(-2.0),
+                },
+            )
+            // .with_smoother(SmoothingStyle::Exponential(10.0))
+            .with_unit(" Hz"),
+            // .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            // .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            high_crossover: FloatParam::new(
+                "High Crossover",
+                2500.0,
+                FloatRange::Skewed {
+                    min: 10.0,
+                    max: 20000.0,
+                    factor: FloatRange::skew_factor(-2.0),
+                },
+            )
+            // .with_smoother(SmoothingStyle::Exponential(10.0))
+            .with_unit(" Hz"),
+            // .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            // .with_string_to_value(formatters::s2v_f32_gain_to_db()),
         }
     }
 }
@@ -176,11 +191,12 @@ impl Plugin for SaiSampler {
 
         for (sample_id, mut channel_samples) in buffer.iter_samples().enumerate() {
             // update params
-            let gain = self.params.gain.smoothed.next();
-            let attack = self.params.attack.smoothed.next() / 1000.0;
+            let precomp = self.params.precomp.smoothed.next() / 1000.0;
             let release = self.params.release.smoothed.next() / 1000.0;
+            let low_crossover = self.params.low_crossover.smoothed.next();
+            let high_crossover = self.params.high_crossover.smoothed.next();
 
-            debug_assert!(attack <= self.latency_seconds);
+            debug_assert!(precomp <= self.latency_seconds);
 
             // handle MIDI events
             while let Some(event) = next_event {
@@ -192,8 +208,8 @@ impl Plugin for SaiSampler {
                     NoteEvent::NoteOn { note, .. } => {
                         self.env = Some(Envelope::new(
                             self.sr,
-                            self.latency_seconds - attack,
-                            attack,
+                            self.latency_seconds - precomp,
+                            precomp,
                             release,
                         ));
                     }
@@ -212,10 +228,10 @@ impl Plugin for SaiSampler {
             }
 
             // update filter frequency
-            self.lpf_l.set_frequency(gain as Precision);
-            self.lpf_r.set_frequency(gain as Precision);
-            self.hpf_l.set_frequency(gain as Precision);
-            self.hpf_r.set_frequency(gain as Precision);
+            self.lpf_l.set_frequency(low_crossover as Precision);
+            self.lpf_r.set_frequency(low_crossover as Precision);
+            self.hpf_l.set_frequency(low_crossover as Precision);
+            self.hpf_r.set_frequency(low_crossover as Precision);
 
             // left channel
             {
