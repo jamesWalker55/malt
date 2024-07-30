@@ -73,7 +73,7 @@ impl Envelope {
             Some(0.0)
         } else if self.attack_remaining > 0.0 {
             // in attack phase
-            let x = self.attack_remaining as f32 / self.attack as f32;
+            let x = 1.0 - self.attack_remaining as f32 / self.attack as f32;
             let y = Self::ease(x);
 
             self.attack_remaining -= 1.0;
