@@ -103,24 +103,23 @@ impl Plugin for SaiSampler {
         _aux: &mut AuxiliaryBuffers,
         ctx: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        assert_eq!(buffer.channels(), 2);
+        debug_assert_eq!(buffer.channels(), 2);
 
-        for (channel_idx, channel_samples) in buffer.iter_samples().enumerate() {
+        for (sample_idx, channel_samples) in buffer.iter_samples().enumerate() {
             // update params
             let gain = self.params.gain.smoothed.next();
 
-            match channel_idx {
-                0 => {
-                    for sample in channel_samples {
+            for (channel_idx, sample) in channel_samples.into_iter().enumerate() {
+                match channel_idx {
+                    0 => {
                         *sample = self.filter_l.process_sample(*sample as f64) as f32;
                     }
-                }
-                1 => {
-                    for sample in channel_samples {
-                        *sample = self.filter_l.process_sample(*sample as f64) as f32;
+                    1 => {
+                        *sample = self.filter_r.process_sample(*sample as f64) as f32;
                     }
+                    _ => unreachable!("only 2 channels as input is supported"),
+                    // _ => (),
                 }
-                _ => unreachable!("only 2 channels as input is supported"),
             }
         }
 
