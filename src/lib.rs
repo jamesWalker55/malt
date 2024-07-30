@@ -6,7 +6,7 @@ mod voice;
 
 use biquad::Precision;
 use envelope::Envelope;
-use filters::{ButterworthLPF, LinkwitzRileyHPF, LinkwitzRileyLPF};
+use filters::{ButterworthLPF, LinkwitzRileyHPF, LinkwitzRileyLPF, FirstOrderLPF};
 use nih_plug::{buffer::ChannelSamples, prelude::*};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use std::sync::Arc;
@@ -23,7 +23,7 @@ struct SaiSampler {
     hpf_r: LinkwitzRileyHPF,
     buf: AllocRingBuffer<f32>,
     env: Option<Envelope>,
-    env_filter: ButterworthLPF,
+    env_filter: FirstOrderLPF,
 }
 
 impl Default for SaiSampler {
@@ -40,7 +40,7 @@ impl Default for SaiSampler {
             hpf_r: LinkwitzRileyHPF::new(0.0, 0.0),
             buf: AllocRingBuffer::new(1),
             env: None,
-            env_filter: ButterworthLPF::new(0.0, 0.0),
+            env_filter: FirstOrderLPF::new(0.0, 0.0),
         }
     }
 }
@@ -156,7 +156,8 @@ impl Plugin for SaiSampler {
         self.env = None;
         // a filter to smooth the envelope
         // at 600Hz it settles in about 2ms
-        self.env_filter = ButterworthLPF::new(600.0, self.sr.into());
+        // switch to 1000Hz to settle in about 1ms
+        self.env_filter = FirstOrderLPF::new(1000.0, self.sr.into());
 
         true
     }
