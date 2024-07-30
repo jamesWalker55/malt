@@ -1,6 +1,7 @@
 use nih_plug::buffer::{Buffer, ChannelSamples};
 
-type Precision = f64;
+pub(crate) type Precision = f64;
+pub(crate) use std::f64::consts as C;
 
 pub(crate) struct Biquad {
     b0: Precision,

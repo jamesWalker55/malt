@@ -1,8 +1,10 @@
 mod biquad;
+mod filters;
 mod oscillator;
 mod voice;
 
 use biquad::Biquad;
+use filters::ButterworthLPF;
 use nih_plug::prelude::*;
 use oscillator as osc;
 use std::sync::Arc;
@@ -10,8 +12,8 @@ use voice::Voice;
 
 struct SaiSampler {
     params: Arc<SaiSamplerParams>,
-    filter_l: Biquad,
-    filter_r: Biquad,
+    filter_l: ButterworthLPF,
+    filter_r: ButterworthLPF,
 }
 
 #[derive(Params)]
@@ -26,12 +28,11 @@ impl Default for SaiSampler {
     fn default() -> Self {
         Self {
             params: Arc::new(SaiSamplerParams::default()),
-            // Coefficients calculated from https://arachnoid.com/BiQuadDesigner/index.html
             // - Samplerate: 44100 Hz
             // - Freq: 600 Hz
-            // - Q: 0.707
-            filter_l: Biquad::new(0.00172186, 0.00344372, 0.00172186, -1.87922368, 0.88611112),
-            filter_r: Biquad::new(0.00172186, 0.00344372, 0.00172186, -1.87922368, 0.88611112),
+            // - Q: 0.707 (Fixed)
+            filter_l: ButterworthLPF::new(600.0, 44100.0),
+            filter_r: ButterworthLPF::new(600.0, 44100.0),
         }
     }
 }
