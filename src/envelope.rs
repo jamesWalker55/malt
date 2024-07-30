@@ -36,6 +36,45 @@ impl Envelope {
         }
     }
 
+    /// Update the attack duration of the envelope (in seconds).
+    /// If the envelope is still in delay, this will attempt to decrease the delay and increase the attack, keeping the total sum (delay + attack) the same.
+    /// If the envelope is already in attack, this does nothing.
+    pub(crate) fn set_attack(&mut self, attack: f32) {
+        // convert seconds to samples
+        let attack = self.sr * attack;
+
+        // do nothing if attack is unchanged
+        if attack == self.attack {
+            return;
+        }
+
+        if self.delay_remaining > 0.0 || self.attack == self.attack_remaining {
+            // still in delay stage || beginning of attack stage, but not done anything yet
+
+            if attack >= self.attack {
+                // new attack is longer
+                // only allowed if remaining delay is lage enough
+                let diff = attack - self.attack;
+                if diff <= self.delay_remaining {
+                    self.delay_remaining -= diff;
+                    self.delay -= diff;
+                    self.attack_remaining += diff;
+                    self.attack += diff;
+                }
+            } else {
+                // new attack is shorter
+                // this is always allowed
+                let diff = self.attack - attack;
+                self.delay_remaining += diff;
+                self.delay += diff;
+                self.attack_remaining -= diff;
+                self.attack -= diff;
+            }
+        } else {
+            // in attack stage or past it, nothing can be done
+        }
+    }
+
     /// Update the release duration of the envelope (in seconds).
     /// If the envelope is still in attack/delay, this will reset the duration
     /// If the envelope is already releasing, only the remaining duration will be affected.
