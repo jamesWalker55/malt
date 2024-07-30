@@ -249,7 +249,7 @@ impl Plugin for SaiSampler {
             }
 
             // test process envelope
-            let env_val = if let Some(env) = &mut self.env {
+            let mut env_val = if let Some(env) = &mut self.env {
                 let x = env.tick();
                 if let Some(x) = x {
                     x
@@ -261,9 +261,9 @@ impl Plugin for SaiSampler {
             } else {
                 0.0
             };
-            let env_filtered_val = self.env_filter.process_sample(env_val as Precision);
+            env_val = self.env_filter.process_sample(env_val as Precision) as f32;
             for sample in channel_samples {
-                *sample = *sample * env_filtered_val as f32;
+                *sample = *sample * env_val as f32;
             }
         }
 
