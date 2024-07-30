@@ -48,8 +48,14 @@ impl Envelope {
             return;
         }
 
-        if self.delay_remaining > 0.0 || self.attack_remaining > 0.0 {
-            // still in attack/delay stage, reset the release to the new value
+        if (
+            // still in attack/delay stage
+            self.delay_remaining > 0.0 || self.attack_remaining > 0.0
+        ) || (
+            // beginning of release stage, but not done anything yet
+            self.release == self.release_remaining
+        ) {
+            // reset the release to the new value
             self.release_remaining = release;
             self.release = release;
         } else if self.release_remaining > 0.0 {
