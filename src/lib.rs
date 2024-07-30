@@ -256,6 +256,7 @@ impl Plugin for SaiSampler {
                 let delayed_sample = *self.buf.get(0).unwrap();
                 // push sample to buffer queue
                 self.buf.push(*sample);
+                // *sample = delayed_sample;
 
                 // process delayed sample
                 let hpf_sample = self.hpf_l.process_sample(delayed_sample as Precision);
@@ -273,6 +274,7 @@ impl Plugin for SaiSampler {
                 let delayed_sample = *self.buf.get(0).unwrap();
                 // push sample to buffer queue
                 self.buf.push(*sample);
+                // *sample = delayed_sample;
 
                 // process delayed sample
                 let hpf_sample = self.hpf_r.process_sample(delayed_sample as Precision);
