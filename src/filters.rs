@@ -2,8 +2,8 @@ use crate::biquad::{Biquad, Precision, C};
 
 pub(crate) struct ButterworthLPF {
     biquad: Biquad,
-    fc: Precision,
-    fs: Precision,
+    f: Precision,
+    sr: Precision,
 }
 
 impl ButterworthLPF {
@@ -23,33 +23,33 @@ impl ButterworthLPF {
         [b0, b1, b2, a1, a2]
     }
 
-    pub(crate) fn new(fc: Precision, fs: Precision) -> Self {
-        let coeffs = Self::coefficients(fc, fs);
+    pub(crate) fn new(frequency: Precision, sample_rate: Precision) -> Self {
+        let coeffs = Self::coefficients(frequency, sample_rate);
         Self {
             biquad: Biquad::new(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4]),
-            fc,
-            fs,
+            f: frequency,
+            sr: sample_rate,
         }
     }
 
-    pub(crate) fn set_fc(&mut self, fc: Precision) {
-        if fc == self.fc {
+    pub(crate) fn set_frequency(&mut self, f: Precision) {
+        if f == self.f {
             return;
         }
 
-        self.fc = fc;
-        let coeffs = Self::coefficients(fc, self.fs);
+        self.f = f;
+        let coeffs = Self::coefficients(f, self.sr);
         self.biquad
             .set_coefficients(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4]);
     }
 
-    pub(crate) fn set_fs(&mut self, fs: Precision) {
-        if fs == self.fs {
+    pub(crate) fn set_sample_rate(&mut self, sr: Precision) {
+        if sr == self.sr {
             return;
         }
 
-        self.fs = fs;
-        let coeffs = Self::coefficients(self.fc, fs);
+        self.sr = sr;
+        let coeffs = Self::coefficients(self.f, sr);
         self.biquad
             .set_coefficients(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4]);
     }

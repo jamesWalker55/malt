@@ -109,8 +109,8 @@ impl Plugin for SaiSampler {
         for (sample_idx, channel_samples) in buffer.iter_samples().enumerate() {
             // update params
             let gain = self.params.gain.smoothed.next();
-            self.filter_l.set_fc(gain as f64);
-            self.filter_r.set_fc(gain as f64);
+            self.filter_l.set_frequency(gain as f64);
+            self.filter_r.set_frequency(gain as f64);
 
             for (channel_idx, sample) in channel_samples.into_iter().enumerate() {
                 match channel_idx {
