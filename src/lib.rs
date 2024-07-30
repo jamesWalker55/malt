@@ -3,6 +3,7 @@ mod filters;
 mod oscillator;
 mod voice;
 
+use biquad::Precision;
 use filters::{ButterworthLPF, LinkwitzRileyHPF, LinkwitzRileyLPF};
 use nih_plug::prelude::*;
 use std::sync::Arc;
@@ -108,24 +109,24 @@ impl Plugin for SaiSampler {
         for mut channel_samples in buffer.iter_samples() {
             // update params
             let gain = self.params.gain.smoothed.next();
-            self.lpf_l.set_frequency(gain as f64);
-            self.lpf_r.set_frequency(gain as f64);
-            self.hpf_l.set_frequency(gain as f64);
-            self.hpf_r.set_frequency(gain as f64);
+            self.lpf_l.set_frequency(gain as Precision);
+            self.lpf_r.set_frequency(gain as Precision);
+            self.hpf_l.set_frequency(gain as Precision);
+            self.hpf_r.set_frequency(gain as Precision);
 
             // left channel
             {
                 let sample = channel_samples.get_mut(0).unwrap();
-                let hpf_sample = self.hpf_l.process_sample(*sample as f64);
-                let lpf_sample = self.lpf_l.process_sample(*sample as f64);
+                let hpf_sample = self.hpf_l.process_sample(*sample as Precision);
+                let lpf_sample = self.lpf_l.process_sample(*sample as Precision);
                 *sample = (lpf_sample - hpf_sample) as f32;
             }
 
             // right channel
             {
                 let sample = channel_samples.get_mut(1).unwrap();
-                let hpf_sample = self.hpf_r.process_sample(*sample as f64);
-                let lpf_sample = self.lpf_r.process_sample(*sample as f64);
+                let hpf_sample = self.hpf_r.process_sample(*sample as Precision);
+                let lpf_sample = self.lpf_r.process_sample(*sample as Precision);
                 *sample = (lpf_sample - hpf_sample) as f32;
             }
         }
