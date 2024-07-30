@@ -3,11 +3,11 @@ mod filters;
 mod oscillator;
 mod voice;
 
-use filters::{ButterworthLPF, LinkwitzRileyLPF};
+use filters::{ButterworthLPF, LinkwitzRileyHPF, LinkwitzRileyLPF};
 use nih_plug::prelude::*;
 use std::sync::Arc;
 
-type Filter = LinkwitzRileyLPF;
+type Filter = LinkwitzRileyHPF;
 
 struct SaiSampler {
     params: Arc<SaiSamplerParams>,
