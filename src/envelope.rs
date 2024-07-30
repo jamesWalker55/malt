@@ -37,25 +37,31 @@ impl Envelope {
     }
 
     /// Update the release duration of the envelope (in seconds).
+    /// If the envelope is still in attack/delay, this will reset the duration
     /// If the envelope is already releasing, only the remaining duration will be affected.
-    pub(crate) fn set_release(&mut self, mut release: f32) {
-        if self.release_remaining <= 0.0 {
-            return;
-        }
+    pub(crate) fn set_release(&mut self, release: f32) {
+        // convert seconds to samples
+        let release = self.sr * release;
 
+        // do nothing if release is unchanged
         if release == self.release {
             return;
         }
 
-        // convert seconds to samples
-        release = self.sr * release;
+        if self.delay_remaining > 0.0 || self.attack_remaining > 0.0 {
+            // still in attack/delay stage, reset the release to the new value
+            self.release_remaining = release;
+            self.release = release;
+        } else if self.release_remaining > 0.0 {
+            // in release stage, stretch the remaining release duration
+            let ratio = release / self.release;
+            self.release_remaining = self.release_remaining * ratio;
 
-        // we need to stretch the remaining time by the new value
-        let ratio = release / self.release;
-        self.release_remaining = self.release_remaining * ratio;
-
-        // now we can update release as usual
-        self.release = release;
+            // now we can update release as usual
+            self.release = release;
+        } else {
+            // envelope has ended, do nothing
+        }
     }
 
     pub(crate) fn is_complete(&self) -> bool {
