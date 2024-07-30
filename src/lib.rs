@@ -2,16 +2,16 @@ mod biquad;
 mod oscillator;
 mod voice;
 
+use biquad::Biquad;
 use nih_plug::prelude::*;
 use oscillator as osc;
 use std::sync::Arc;
 use voice::Voice;
 
 struct SaiSampler {
-    sample_rate: f32,
     params: Arc<SaiSamplerParams>,
-    // 1 voice for each note
-    voices: [Option<Voice<osc::Sine>>; 128],
+    filter_l: Biquad,
+    filter_r: Biquad,
 }
 
 #[derive(Params)]
@@ -25,9 +25,13 @@ const EMPTY_VOICE: Option<Voice<osc::Sine>> = None;
 impl Default for SaiSampler {
     fn default() -> Self {
         Self {
-            sample_rate: 1.0,
             params: Arc::new(SaiSamplerParams::default()),
-            voices: [EMPTY_VOICE; 128],
+            // Coefficients calculated from https://arachnoid.com/BiQuadDesigner/index.html
+            // - Samplerate: 44100 Hz
+            // - Freq: 600 Hz
+            // - Q: 0.707
+            filter_l: Biquad::new(0.00172186, 0.00344372, 0.00172186, -1.87922368, 0.88611112),
+            filter_r: Biquad::new(0.00172186, 0.00344372, 0.00172186, -1.87922368, 0.88611112),
         }
     }
 }
@@ -61,7 +65,7 @@ impl Plugin for SaiSampler {
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
     const AUDIO_IO_LAYOUTS: &'static [AudioIOLayout] = &[AudioIOLayout {
-        main_input_channels: None,
+        main_input_channels: NonZeroU32::new(2),
         main_output_channels: NonZeroU32::new(2),
 
         aux_input_ports: &[],
@@ -88,20 +92,10 @@ impl Plugin for SaiSampler {
         _buffer_config: &BufferConfig,
         _context: &mut impl InitContext<Self>,
     ) -> bool {
-        self.sample_rate = _buffer_config.sample_rate;
-        for voice in self.voices.iter_mut() {
-            match voice {
-                Some(voice) => voice.set_samplerate(self.sample_rate),
-                None => (),
-            }
-        }
-
         true
     }
 
-    fn reset(&mut self) {
-        self.voices = [EMPTY_VOICE; 128];
-    }
+    fn reset(&mut self) {}
 
     fn process(
         &mut self,
@@ -109,51 +103,24 @@ impl Plugin for SaiSampler {
         _aux: &mut AuxiliaryBuffers,
         ctx: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        let mut next_event = ctx.next_event();
-        for (sample_id, channel_samples) in buffer.iter_samples().enumerate() {
-            // handle MIDI events
-            while let Some(event) = next_event {
-                if event.timing() != sample_id as u32 {
-                    break;
-                }
+        assert_eq!(buffer.channels(), 2);
 
-                match event {
-                    NoteEvent::NoteOn { note, .. } => {
-                        self.voices[note as usize] = Some(Voice::new(
-                            osc::Sine,
-                            self.sample_rate,
-                            note as f32,
-                            None,
-                        ))
-                    }
-                    NoteEvent::NoteOff { note, .. } => self.voices[note as usize] = None,
-                    NoteEvent::Choke { note, .. } => self.voices[note as usize] = None,
-                    NoteEvent::MidiPitchBend { value, .. } => {
-                        // value is in range 0.0 -- 1.0
-                        for voice in self.voices.iter_mut() {
-                            match voice {
-                                Some(voice) => voice.set_pitch_offset(value * 4.0 - 2.0),
-                                None => (),
-                            }
-                        }
-                    }
-                    _ => (),
-                }
-
-                next_event = ctx.next_event();
-            }
-
+        for (channel_idx, channel_samples) in buffer.iter_samples().enumerate() {
             // update params
             let gain = self.params.gain.smoothed.next();
 
-            // processing block
-            let x: f32 = self
-                .voices
-                .iter_mut()
-                .filter_map(|x| x.as_mut().map(|voice| voice.tick()))
-                .sum();
-            for sample in channel_samples {
-                *sample += x * gain;
+            match channel_idx {
+                0 => {
+                    for sample in channel_samples {
+                        *sample = self.filter_l.process_sample(*sample as f64) as f32;
+                    }
+                }
+                1 => {
+                    for sample in channel_samples {
+                        *sample = self.filter_l.process_sample(*sample as f64) as f32;
+                    }
+                }
+                _ => unreachable!("only 2 channels as input is supported"),
             }
         }
 

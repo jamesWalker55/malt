@@ -2,7 +2,7 @@ use nih_plug::buffer::{Buffer, ChannelSamples};
 
 type Precision = f64;
 
-struct Biquad {
+pub(crate) struct Biquad {
     b0: Precision,
     b1: Precision,
     b2: Precision,
@@ -18,7 +18,13 @@ struct Biquad {
 }
 
 impl Biquad {
-    fn new(b0: Precision, b1: Precision, b2: Precision, a1: Precision, a2: Precision) -> Self {
+    pub(crate) fn new(
+        b0: Precision,
+        b1: Precision,
+        b2: Precision,
+        a1: Precision,
+        a2: Precision,
+    ) -> Self {
         Self {
             b0,
             b1,
@@ -32,7 +38,7 @@ impl Biquad {
         }
     }
 
-    fn set_coefficients(
+    pub(crate) fn set_coefficients(
         &mut self,
         b0: Precision,
         b1: Precision,
@@ -47,12 +53,12 @@ impl Biquad {
         self.a2 = a2;
     }
 
-    fn is_stable(&self) -> bool {
+    pub(crate) fn is_stable(&self) -> bool {
         // |a1| < 2  &&  |a1| − 1 < a2 < 1
         (self.a1.abs() < 2.0) && ((self.a1.abs() - 1.0) < self.a2 && self.a2 < 1.0)
     }
 
-    fn process_sample(&mut self, x0: Precision) -> Precision {
+    pub(crate) fn process_sample(&mut self, x0: Precision) -> Precision {
         let u0 = x0 * self.b0 + self.x1 * self.b1 + self.x2 * self.b2
             - self.u1 * self.a1
             - self.u2 * self.a2;
