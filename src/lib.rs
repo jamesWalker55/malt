@@ -3,6 +3,7 @@ mod envelope;
 mod filters;
 mod oscillator;
 mod parameter_formatters;
+mod pattern;
 mod voice;
 
 use biquad::Precision;
