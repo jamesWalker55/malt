@@ -156,7 +156,7 @@ impl CurveType {
 }
 
 #[derive(Debug, Clone)]
-struct Point {
+pub(crate) struct Point {
     x: f64,
     y: f64,
     tension: f64,
@@ -164,7 +164,7 @@ struct Point {
 }
 
 impl Point {
-    fn new(x: f64, y: f64, tension: f64, kind: CurveType) -> Option<Self> {
+    pub(crate) fn new(x: f64, y: f64, tension: f64, kind: CurveType) -> Option<Self> {
         if !(0.0..=1.0).contains(&x) {
             return None;
         }
@@ -184,54 +184,8 @@ impl Point {
     }
 }
 
-// #[derive(Debug, Clone)]
-// struct Segment {
-//     x1: f64,
-//     y1: f64,
-//     x2: f64,
-//     y2: f64,
-//     tension: f64,
-//     kind: CurveType,
-// }
-
-// impl Segment {
-//     fn new(x1: f64, y1: f64, x2: f64, y2: f64, tension: f64, kind: CurveType) -> Option<Self> {
-//         if !(0.0..=1.0).contains(&x1) {
-//             return None;
-//         }
-//         if !(0.0..=1.0).contains(&y1) {
-//             return None;
-//         }
-//         if !(0.0..=1.0).contains(&x2) {
-//             return None;
-//         }
-//         if !(0.0..=1.0).contains(&y2) {
-//             return None;
-//         }
-//         if !(-1.0..=1.0).contains(&tension) {
-//             return None;
-//         }
-//         if x1 > x2 {
-//             return None;
-//         }
-
-//         Some(Self {
-//             x1,
-//             y1,
-//             x2,
-//             y2,
-//             tension,
-//             kind,
-//         })
-//     }
-
-//     fn from_points(p1: &Point, p2: &Point) -> Option<Self> {
-//         Segment::new(p1.x, p1.y, p2.x, p2.y, p1.tension, p1.kind)
-//     }
-// }
-
 #[derive(Error, Debug)]
-pub enum PatternError {
+pub(crate) enum PatternError {
     #[error("operation causes conflict with start/end point")]
     EndPointConflict,
     #[error("the specified point is out of bounds")]
@@ -242,11 +196,19 @@ type Result<T, E = PatternError> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Pattern {
-    // copy_pattern: Vec<Point>,
     first_point: Point,
     last_point: Point,
     mid_points: Vec<Point>,
-    // segments: Vec<Segment>,
+}
+
+impl Default for Pattern {
+    fn default() -> Self {
+        Self::new(vec![
+            Point::new(0.0, 0.0, 0.0, CurveType::Curve).unwrap(),
+            Point::new(1.0, 1.0, 0.0, CurveType::Curve).unwrap(),
+        ])
+        .unwrap()
+    }
 }
 
 impl Pattern {
@@ -427,67 +389,6 @@ impl Pattern {
 
         panic!("called get_y_at with an out-of-bounds value: {}", x);
     }
-
-    // pub(crate) fn build_segments(&self) -> Vec<Segment> {
-    //     // TODO: There should be a mutex lock here
-    //     // TODO: "prevents crash while reading Y from another thread"
-
-    //     // // attempt using generators
-    //     // let mut g = Gn::new_scoped(|mut s| {
-    //     //     s.yield_(&self.first_point);
-    //     //     for p in self.mid_points.iter() {
-    //     //         s.yield_(p);
-    //     //     }
-    //     //     s.yield_(&self.last_point);
-    //     //     done!();
-    //     // });
-
-    //     // let mut result = vec![];
-
-    //     // let mut p1 = g.next().unwrap();
-    //     // loop {
-    //     //     let p2 = g.next();
-    //     //     let Some(p2) = p2 else {
-    //     //         return result;
-    //     //     };
-
-    //     //     result.push(Segment::new(p1.x, p1.y, p2.x, p2.y, p1.tension, 0.0, p1.kind).unwrap());
-
-    //     //     p1 = p2;
-    //     // }
-
-    //     if self.mid_points.is_empty() {
-    //         // just start / end points
-    //         let p1 = &self.first_point;
-    //         let p2 = &self.last_point;
-    //         return vec![Segment::from_points(p1, p2).unwrap()];
-    //     }
-
-    //     let mut result = vec![];
-
-    //     // handle start point
-    //     {
-    //         let p1 = &self.first_point;
-    //         let p2 = self.mid_points.get(0).unwrap();
-    //         result.push(Segment::from_points(p1, p2).unwrap());
-    //     }
-
-    //     // handle mid points (except last mid-point)
-    //     for i in 0..(self.mid_points.len() - 1) {
-    //         let p1 = self.mid_points.get(i).unwrap();
-    //         let p2 = self.mid_points.get(i + 1).unwrap();
-    //         result.push(Segment::from_points(p1, p2).unwrap());
-    //     }
-
-    //     // handle last mid-point
-    //     {
-    //         let p1 = self.mid_points.get(self.mid_points.len() - 1).unwrap();
-    //         let p2 = &self.last_point;
-    //         result.push(Segment::from_points(p1, p2).unwrap());
-    //     }
-
-    //     result
-    // }
 
     pub(crate) fn sine() -> Self {
         Self::new(vec![
