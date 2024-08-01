@@ -57,26 +57,18 @@ slider63:band_mode=0<0,1,1{4p,2p}>-Band mode
 /*-----------*/
 
 // lots of functions
-  function set_scaling_behaviour() (
-    absolute_frequencies ? (
-      freq_max = 22050;
-      norm_freq_min = 20.0 / freq_max;
-      norm_freq_max = freq_max / srate;
-    ) : (
-      freq_max = 0.5 * srate;
-      norm_freq_min = 20.0 / 22050;
-      norm_freq_max = 0.5;
-    );
-  );
-
-  function f_trafo(freq)
-    local()
-    global(srate, freq_max, norm_freq_min)
-    instance()
+  function set_scaling_behaviour()
     (
-      freq_max * exp( (1-freq) * log(norm_freq_min) )
+      absolute_frequencies ? (
+        freq_max = 22050;
+        norm_freq_min = 20.0 / freq_max;
+        norm_freq_max = freq_max / srate;
+      ) : (
+        freq_max = 0.5 * srate;
+        norm_freq_min = 20.0 / 22050;
+        norm_freq_max = 0.5;
+      );
     );
-
   function initBands()
     local()
     global()
@@ -108,62 +100,6 @@ slider63:band_mode=0<0,1,1{4p,2p}>-Band mode
         slider(midx) = slider(midx+1);
         midx = midx + 1;
       );
-    );
-
-  /* Shift slider data right (for different bands) */
-  function shiftRightMem(loc, fromIdx, numElements)
-    local(midx)
-    global()
-    (
-      midx = loc + numElements;
-      loop(numElements-fromIdx,
-        midx[] = midx[-1];
-        midx -= 1;
-      );
-    );
-
-  /* Shift slider data left  (for different bands) */
-  function shiftLeftMem(loc, fromIdx, numElements)
-    local(midx)
-    global()
-    (
-      midx = loc+fromIdx;
-      loop(numElements-fromIdx,
-        midx[] = midx[1];
-        midx += 1;
-      );
-    );
-
-  /* Make room for a new band in the slider data */
-  function addBand(idx)
-    local(midx)
-    instance()
-    (
-      shiftRight( driveLocation,     idx, maxCuts );
-      shiftRight( frequencyLocation, idx, maxCuts-1 );
-
-      cuts = cuts + 1;
-    );
-
-  /* Remove a band and move other slider data accordingly */
-  function remBand(idx)
-    local(midx)
-    instance()
-    (
-      shiftLeft( driveLocation,     idx, maxCuts );
-      shiftLeft( frequencyLocation, idx, maxCuts-1 );
-
-      cuts = cuts - 1;
-    );
-
-  /* Feed sample to FFT */
-  function feedSample(sample)
-    global(fftSize)
-    instance(recPtr, window, rStart, rEnd, fftLoc)
-    local()
-    (
-      recPtr[] = sample;
-      recPtr = (recPtr+1) >= rEnd ? rStart : recPtr + 1;
     );
 
   /* Initialize FFT windowing function */
@@ -348,72 +284,72 @@ slider63:band_mode=0<0,1,1{4p,2p}>-Band mode
     );
 
   function initSpectrum(memoryOffset, fftSize, srate)
-  global(newUI)
-  instance(recPtr, window, rStart, rEnd, fftLoc, hzoffset, thisUI, slope)
-  local()
-  (
-    slope     = 3;
+    global(newUI)
+    instance(recPtr, window, rStart, rEnd, fftLoc, hzoffset, thisUI, slope)
+    local()
+    (
+      slope     = 3;
 
-    hzoffset  = 10*fftSize/srate;
-    window    = memoryOffset + fftSize + (fftSize*0.5 - 1);
+      hzoffset  = 10*fftSize/srate;
+      window    = memoryOffset + fftSize + (fftSize*0.5 - 1);
 
-    // Start and end of the buffer
-    rStart    = memoryOffset;                              // rpos
-    rEnd      = window;                                      // hsize
+      // Start and end of the buffer
+      rStart    = memoryOffset;                              // rpos
+      rEnd      = window;                                      // hsize
 
-    fftLoc    = window + (fftSize*0.5 + 1); // fftw
+      fftLoc    = window + (fftSize*0.5 + 1); // fftw
 
-    recPtr    = rStart;
-    thisUI    = newUI+=1;
+      recPtr    = rStart;
+      thisUI    = newUI+=1;
 
-    this.initWindow(3)
-  );
+      this.initWindow(3)
+    );
 
   function resetBandMeter()
-  local()
-  global()
-  instance(in, pre, post)
-  (
-    in = pre = post = 0;
-  );
+    local()
+    global()
+    instance(in, pre, post)
+    (
+      in = pre = post = 0;
+    );
 
   function processBands()
-  local(BW2)
-  global( Drive1,    Drive2,    Drive3,     Drive4,     Drive5
-          play1,     play2,     play3,      play4,      play5 )
-  instance(b1, b2, b3, b4, b5, F1, F2, F3, F4, F5,
-           g1,       g2,       g3,       g4,       g5,
-           lg1,      lg2,      lg3,      lg4,      lg5 )
-  (
-    ( lg1 != Drive1 ) ? ( g1 = (10^(0.05*Drive1)); lg1 = Drive1; );
-    ( lg2 != Drive2 ) ? ( g2 = (10^(0.05*Drive2)); lg2 = Drive2; );
-    ( lg3 != Drive3 ) ? ( g3 = (10^(0.05*Drive3)); lg3 = Drive3; );
-    ( lg4 != Drive4 ) ? ( g4 = (10^(0.05*Drive4)); lg4 = Drive4; );
-    ( lg5 != Drive5 ) ? ( g5 = (10^(0.05*Drive5)); lg5 = Drive5; );
+    local(BW2)
+    global( Drive1,    Drive2,    Drive3,     Drive4,     Drive5
+            play1,     play2,     play3,      play4,      play5 )
+    instance(b1, b2, b3, b4, b5, F1, F2, F3, F4, F5,
+            g1,       g2,       g3,       g4,       g5,
+            lg1,      lg2,      lg3,      lg4,      lg5 )
+    (
+      ( lg1 != Drive1 ) ? ( g1 = (10^(0.05*Drive1)); lg1 = Drive1; );
+      ( lg2 != Drive2 ) ? ( g2 = (10^(0.05*Drive2)); lg2 = Drive2; );
+      ( lg3 != Drive3 ) ? ( g3 = (10^(0.05*Drive3)); lg3 = Drive3; );
+      ( lg4 != Drive4 ) ? ( g4 = (10^(0.05*Drive4)); lg4 = Drive4; );
+      ( lg5 != Drive5 ) ? ( g5 = (10^(0.05*Drive5)); lg5 = Drive5; );
 
-    b1.l = b2.l = b3.l = b4.l = b5.l = 0;
-    b1.r = b2.r = b3.r = b4.r = b5.r = 0;
-    play1 ? (
-      b1.l = g1*b1.inL;
-      b1.r = g1*b1.inR;
+      b1.l = b2.l = b3.l = b4.l = b5.l = 0;
+      b1.r = b2.r = b3.r = b4.r = b5.r = 0;
+      play1 ? (
+        b1.l = g1*b1.inL;
+        b1.r = g1*b1.inR;
+      );
+      play2 ? (
+        b2.l = g2*b2.inL;
+        b2.r = g2*b2.inR;
+      );
+      play3 ? (
+        b3.l = g3*b3.inL;
+        b3.r = g3*b3.inR;
+      );
+      play4 ? (
+        b4.l = g4*b4.inL;
+        b4.r = g4*b4.inR;
+      );
+      play5 ? (
+        b5.l = g5*b5.inL;
+        b5.r = g5*b5.inR;
+      );
     );
-    play2 ? (
-      b2.l = g2*b2.inL;
-      b2.r = g2*b2.inR;
-    );
-    play3 ? (
-      b3.l = g3*b3.inL;
-      b3.r = g3*b3.inR;
-    );
-    play4 ? (
-      b4.l = g4*b4.inL;
-      b4.r = g4*b4.inR;
-    );
-    play5 ? (
-      b5.l = g5*b5.inL;
-      b5.r = g5*b5.inR;
-    );
-  );
 
 // end of functions
 
@@ -476,12 +412,6 @@ F5Block1    = 15*bufferDist;
 F5Block2    = 16*bufferDist;
 
 specBufferLoc = 17*bufferDist;
-
-specBuffer.initBuffer(specBufferLoc, specBufferLoc+bufferDist-4);
-
-// INITIALIZATION
-spectrumIn.initSpectrum(audioBufIn, fftSize, srate);
-spectrumOut.initSpectrum(audioBufOut, fftSize, srate);
 
 @block
   (last_gmem_group != gmem_group) ||
@@ -1232,15 +1162,6 @@ spectrumOut.initSpectrum(audioBufOut, fftSize, srate);
 
   // end of functions
 
-  FIR ? (
-    specBuffer.updateBuffer(.5*(spl0+spl1));
-    specBuffer.setOffset(newPDC+2);
-    cSpec = specBuffer.readBuffer();
-    spectrumIn.feedSample(cSpec);
-  ) : (
-    spectrumIn.feedSample(.5*(spl0+spl1));
-  );
-
   // Split signal into bands
   filterBank.updateCoeffs();
 
@@ -1272,8 +1193,6 @@ spectrumOut.initSpectrum(audioBufOut, fftSize, srate);
       );
     );
   );
-
-  spectrumOut.feedSample(.5*out);
 
   /* Uncomment for testing flatness*/
   // spl0 += spl2 + spl4 + spl6 + spl8;
