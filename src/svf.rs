@@ -97,16 +97,20 @@ impl<T: GainlessFilterKind> GainlessFilter<T> {
         }
     }
 
+    fn update_coefficients(&mut self) {
+        let coeffs = T::coefficients(self.f, self.q, self.sr);
+        self.svf.set_coefficients(
+            coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4], coeffs[5],
+        );
+    }
+
     pub(crate) fn set_frequency(&mut self, f: Precision) {
         if f == self.f {
             return;
         }
 
         self.f = f;
-        let coeffs = T::coefficients(f, self.q, self.sr);
-        self.svf.set_coefficients(
-            coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4], coeffs[5],
-        );
+        self.update_coefficients();
     }
 
     pub(crate) fn set_q(&mut self, q: Precision) {
@@ -115,10 +119,7 @@ impl<T: GainlessFilterKind> GainlessFilter<T> {
         }
 
         self.q = q;
-        let coeffs = T::coefficients(self.f, q, self.sr);
-        self.svf.set_coefficients(
-            coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4], coeffs[5],
-        );
+        self.update_coefficients();
     }
 
     pub(crate) fn set_sample_rate(&mut self, sr: Precision) {
@@ -127,10 +128,7 @@ impl<T: GainlessFilterKind> GainlessFilter<T> {
         }
 
         self.sr = sr;
-        let coeffs = T::coefficients(self.f, self.q, sr);
-        self.svf.set_coefficients(
-            coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4], coeffs[5],
-        );
+        self.update_coefficients();
     }
 }
 
@@ -172,16 +170,20 @@ impl<T: GainFilterKind> GainFilter<T> {
         }
     }
 
+    fn update_coefficients(&mut self) {
+        let coeffs = T::coefficients(self.f, self.q, self.gain, self.sr);
+        self.svf.set_coefficients(
+            coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4], coeffs[5],
+        );
+    }
+
     pub(crate) fn set_frequency(&mut self, f: Precision) {
         if f == self.f {
             return;
         }
 
         self.f = f;
-        let coeffs = T::coefficients(f, self.q, self.gain, self.sr);
-        self.svf.set_coefficients(
-            coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4], coeffs[5],
-        );
+        self.update_coefficients();
     }
 
     pub(crate) fn set_q(&mut self, q: Precision) {
@@ -190,10 +192,7 @@ impl<T: GainFilterKind> GainFilter<T> {
         }
 
         self.q = q;
-        let coeffs = T::coefficients(self.f, q, self.gain, self.sr);
-        self.svf.set_coefficients(
-            coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4], coeffs[5],
-        );
+        self.update_coefficients();
     }
 
     pub(crate) fn set_gain(&mut self, gain: Precision) {
@@ -202,10 +201,7 @@ impl<T: GainFilterKind> GainFilter<T> {
         }
 
         self.gain = gain;
-        let coeffs = T::coefficients(self.f, self.q, gain, self.sr);
-        self.svf.set_coefficients(
-            coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4], coeffs[5],
-        );
+        self.update_coefficients();
     }
 
     pub(crate) fn set_sample_rate(&mut self, sr: Precision) {

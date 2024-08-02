@@ -102,15 +102,19 @@ impl<T: FixedQFilterKind> FixedQFilter<T> {
         }
     }
 
+    fn update_coefficients(&mut self) {
+        let coeffs = T::coefficients(self.f, self.sr);
+        self.biquad
+            .set_coefficients(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4]);
+    }
+
     pub(crate) fn set_frequency(&mut self, f: Precision) {
         if f == self.f {
             return;
         }
 
         self.f = f;
-        let coeffs = T::coefficients(f, self.sr);
-        self.biquad
-            .set_coefficients(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4]);
+        self.update_coefficients();
     }
 
     pub(crate) fn set_sample_rate(&mut self, sr: Precision) {
@@ -119,9 +123,7 @@ impl<T: FixedQFilterKind> FixedQFilter<T> {
         }
 
         self.sr = sr;
-        let coeffs = T::coefficients(self.f, sr);
-        self.biquad
-            .set_coefficients(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4]);
+        self.update_coefficients();
     }
 }
 
