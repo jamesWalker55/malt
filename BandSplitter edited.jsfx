@@ -414,39 +414,6 @@ F5Block2    = 16*bufferDist;
 specBufferLoc = 17*bufferDist;
 
 @block
-  (last_gmem_group != gmem_group) ||
-  (last_sent_cuts != Cuts) ||
-  (last_sent_f1 != Freq1) ||
-  (last_sent_f2 != Freq2) ||
-  (last_sent_f3 != Freq3) ||
-  (last_sent_f4 != Freq4) ||
-  (last_sent_slope != band_mode) ||
-  (last_sent_abs_placement != abs_placement) ||
-  (last_sent_absolute_frequencies != absolute_frequencies) ? (
-    last_gmem_group = gmem_group;
-    last_sent_cuts = Cuts;
-    last_sent_f1 = Freq1;
-    last_sent_f2 = Freq2;
-    last_sent_f3 = Freq3;
-    last_sent_f4 = Freq4;
-    last_sent_abs_placement = abs_placement;
-    last_sent_slope = band_mode;
-    last_sent_absolute_frequencies = absolute_frequencies;
-
-    (gmem_group > 0) ? (
-      gm_ptr = 9 * (gmem_group - 1);
-      gmem[gm_ptr] = time_precise();  /* Identity */
-      gmem[gm_ptr + 1] = last_sent_cuts;
-      gmem[gm_ptr + 2] = last_sent_f1;
-      gmem[gm_ptr + 3] = last_sent_f2;
-      gmem[gm_ptr + 4] = last_sent_f3;
-      gmem[gm_ptr + 5] = last_sent_f4;
-      gmem[gm_ptr + 6] = last_sent_abs_placement;
-      gmem[gm_ptr + 7] = last_sent_slope;
-      gmem[gm_ptr + 8] = last_sent_absolute_frequencies;
-    );
-  );
-
   set_scaling_behaviour();
 
   !mute1 ? play1 = 1 : play1 = 0;
