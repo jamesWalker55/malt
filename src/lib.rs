@@ -3,6 +3,7 @@ mod envelope;
 mod oscillator;
 mod parameter_formatters;
 mod pattern;
+mod svf;
 mod voice;
 
 use biquad::{
