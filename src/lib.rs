@@ -6,8 +6,8 @@ mod pattern;
 mod voice;
 
 use biquad::{
-    ButterworthLPF, FirstOrderAPF, FirstOrderLPF, FixedQFilter, LinkwitzRileyHPF,
-    LinkwitzRileyLPF, Precision,
+    ButterworthLPF, FirstOrderAPF, FirstOrderLPF, FixedQFilter, LinkwitzRileyHPF, LinkwitzRileyLPF,
+    Precision,
 };
 use envelope::Envelope;
 use nih_plug::{buffer::ChannelSamples, prelude::*};
@@ -17,7 +17,7 @@ use ringbuffer::{AllocRingBuffer, RingBuffer};
 use std::sync::Arc;
 use util::{db_to_gain, gain_to_db};
 
-struct SaiSampler {
+pub struct SaiSampler {
     params: Arc<SaiSamplerParams>,
     sr: f32,
     latency_seconds: f32,
