@@ -1,14 +1,15 @@
 mod biquad;
 mod envelope;
-mod filters;
 mod oscillator;
 mod parameter_formatters;
 mod pattern;
 mod voice;
 
-use biquad::Precision;
+use biquad::{
+    ButterworthLPF, FirstOrderAPF, FirstOrderLPF, FixedQFilter, LinkwitzRileyHPF,
+    LinkwitzRileyLPF, Precision,
+};
 use envelope::Envelope;
-use filters::{ButterworthLPF, FirstOrderLPF, LinkwitzRileyHPF, LinkwitzRileyLPF};
 use nih_plug::{buffer::ChannelSamples, prelude::*};
 use nih_plug_egui::{create_egui_editor, egui, widgets, EguiState};
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
@@ -21,13 +22,13 @@ struct SaiSampler {
     sr: f32,
     latency_seconds: f32,
     latency_samples: u32,
-    lpf_l: LinkwitzRileyLPF,
-    lpf_r: LinkwitzRileyLPF,
-    hpf_l: LinkwitzRileyHPF,
-    hpf_r: LinkwitzRileyHPF,
+    lpf_l: FixedQFilter<LinkwitzRileyLPF>,
+    lpf_r: FixedQFilter<LinkwitzRileyLPF>,
+    hpf_l: FixedQFilter<LinkwitzRileyHPF>,
+    hpf_r: FixedQFilter<LinkwitzRileyHPF>,
     buf: AllocRingBuffer<f32>,
     env: Option<Envelope>,
-    env_filter: FirstOrderLPF,
+    env_filter: FixedQFilter<FirstOrderLPF>,
 
     /// The editor state, saved together with the parameter state so the custom scaling can be
     /// restored.
@@ -49,13 +50,13 @@ impl Default for SaiSampler {
             sr: 0.0,
             latency_seconds: 0.0,
             latency_samples: 0,
-            lpf_l: LinkwitzRileyLPF::new(0.0, 0.0),
-            lpf_r: LinkwitzRileyLPF::new(0.0, 0.0),
-            hpf_l: LinkwitzRileyHPF::new(0.0, 0.0),
-            hpf_r: LinkwitzRileyHPF::new(0.0, 0.0),
+            lpf_l: FixedQFilter::new(0.0, 0.0),
+            lpf_r: FixedQFilter::new(0.0, 0.0),
+            hpf_l: FixedQFilter::new(0.0, 0.0),
+            hpf_r: FixedQFilter::new(0.0, 0.0),
             buf: AllocRingBuffer::new(1),
             env: None,
-            env_filter: FirstOrderLPF::new(0.0, 0.0),
+            env_filter: FixedQFilter::new(0.0, 0.0),
             // TEMP
             peak_meter: Arc::new(AtomicF32::new(util::MINUS_INFINITY_DB)),
             editor_state: EguiState::from_size(300, 400),
@@ -192,17 +193,17 @@ impl Plugin for SaiSampler {
         };
 
         // setup filters
-        self.lpf_l = LinkwitzRileyLPF::new(1000.0, self.sr.into());
-        self.lpf_r = LinkwitzRileyLPF::new(1000.0, self.sr.into());
-        self.hpf_l = LinkwitzRileyHPF::new(1000.0, self.sr.into());
-        self.hpf_r = LinkwitzRileyHPF::new(1000.0, self.sr.into());
+        self.lpf_l = FixedQFilter::new(1000.0, self.sr.into());
+        self.lpf_r = FixedQFilter::new(1000.0, self.sr.into());
+        self.hpf_l = FixedQFilter::new(1000.0, self.sr.into());
+        self.hpf_r = FixedQFilter::new(1000.0, self.sr.into());
 
         // clear envelope
         self.env = None;
         // a filter to smooth the envelope
         // at 600Hz it settles in about 2ms
         // switch to 1000Hz to settle in about 1ms
-        self.env_filter = FirstOrderLPF::new(1000.0, self.sr.into());
+        self.env_filter = FixedQFilter::new(1000.0, self.sr.into());
 
         true
     }
