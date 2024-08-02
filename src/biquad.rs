@@ -1,5 +1,3 @@
-use nih_plug::buffer::{Buffer, ChannelSamples};
-
 type Precision = f64;
 use std::f64::consts as C;
 
@@ -79,7 +77,7 @@ impl Biquad {
 }
 
 pub(crate) trait FixedQFilterKind {
-    fn coefficients(fc: Precision, fs: Precision) -> [Precision; 5];
+    fn coefficients(f: Precision, sr: Precision) -> [Precision; 5];
 }
 
 pub(crate) struct FixedQFilter<T: FixedQFilterKind> {
@@ -130,9 +128,9 @@ impl<T: FixedQFilterKind> FixedQFilter<T> {
 pub(crate) struct ButterworthLPF;
 
 impl FixedQFilterKind for ButterworthLPF {
-    fn coefficients(fc: Precision, fs: Precision) -> [Precision; 5] {
+    fn coefficients(f: Precision, sr: Precision) -> [Precision; 5] {
         // Code from https://github.com/dimtass/DSP-Cpp-filters
-        let c = 1.0 / (C::PI * fc / fs).tan();
+        let c = 1.0 / (C::PI * f / sr).tan();
         let b0 = 1.0 / (1.0 + C::SQRT_2 * c + c.powi(2));
         let b1 = 2.0 * b0;
         let b2 = b0;
@@ -146,10 +144,10 @@ impl FixedQFilterKind for ButterworthLPF {
 pub(crate) struct LinkwitzRileyLPF;
 
 impl FixedQFilterKind for LinkwitzRileyLPF {
-    fn coefficients(fc: Precision, fs: Precision) -> [Precision; 5] {
+    fn coefficients(f: Precision, sr: Precision) -> [Precision; 5] {
         // Code from https://github.com/dimtass/DSP-Cpp-filters
-        let th = C::PI * fc / fs;
-        let wc = C::PI * fc;
+        let th = C::PI * f / sr;
+        let wc = C::PI * f;
         let k = wc / th.tan();
 
         let d = k.powi(2) + wc.powi(2) + 2.0 * k * wc;
@@ -166,10 +164,10 @@ impl FixedQFilterKind for LinkwitzRileyLPF {
 pub(crate) struct LinkwitzRileyHPF;
 
 impl FixedQFilterKind for LinkwitzRileyHPF {
-    fn coefficients(fc: Precision, fs: Precision) -> [Precision; 5] {
+    fn coefficients(f: Precision, sr: Precision) -> [Precision; 5] {
         // Code from https://github.com/dimtass/DSP-Cpp-filters
-        let th = C::PI * fc / fs;
-        let wc = C::PI * fc;
+        let th = C::PI * f / sr;
+        let wc = C::PI * f;
         let k = wc / th.tan();
 
         let d = k.powi(2) + wc.powi(2) + 2.0 * k * wc;
@@ -186,9 +184,9 @@ impl FixedQFilterKind for LinkwitzRileyHPF {
 pub(crate) struct FirstOrderLPF;
 
 impl FixedQFilterKind for FirstOrderLPF {
-    fn coefficients(fc: Precision, fs: Precision) -> [Precision; 5] {
+    fn coefficients(f: Precision, sr: Precision) -> [Precision; 5] {
         // Code from https://github.com/dimtass/DSP-Cpp-filters
-        let th = 2.0 * C::PI * fc / fs;
+        let th = 2.0 * C::PI * f / sr;
         let g = th.cos() / (1.0 + th.sin());
         let b0 = (1.0 - g) / 2.0;
         let b1 = (1.0 - g) / 2.0;
@@ -203,9 +201,9 @@ impl FixedQFilterKind for FirstOrderLPF {
 pub(crate) struct FirstOrderAPF;
 
 impl FixedQFilterKind for FirstOrderAPF {
-    fn coefficients(fc: Precision, fs: Precision) -> [Precision; 5] {
+    fn coefficients(f: Precision, sr: Precision) -> [Precision; 5] {
         // Code from https://github.com/dimtass/DSP-Cpp-filters
-        let b = ((C::PI * fc / fs).tan() - 1.0) / ((C::PI * fc / fs).tan() + 1.0);
+        let b = ((C::PI * f / sr).tan() - 1.0) / ((C::PI * f / sr).tan() + 1.0);
         let b0 = b;
         let b1 = 1.0;
         let b2 = 0.0;
