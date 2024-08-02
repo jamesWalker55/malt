@@ -127,6 +127,68 @@ impl<T: FixedQFilterKind> FixedQFilter<T> {
     }
 }
 
+pub(crate) trait GainlessFilterKind {
+    fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 5];
+}
+
+pub(crate) struct GainlessFilter<T: GainlessFilterKind> {
+    biquad: Biquad,
+    f: Precision,
+    q: Precision,
+    sr: Precision,
+    kind: std::marker::PhantomData<T>,
+}
+
+impl<T: GainlessFilterKind> GainlessFilter<T> {
+    pub(crate) fn process_sample(&mut self, x0: Precision) -> Precision {
+        self.biquad.process_sample(x0)
+    }
+
+    pub(crate) fn new(frequency: Precision, q: Precision, sample_rate: Precision) -> Self {
+        let coeffs = T::coefficients(frequency, q, sample_rate);
+        Self {
+            biquad: Biquad::new(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4]),
+            f: frequency,
+            q,
+            sr: sample_rate,
+            kind: std::marker::PhantomData,
+        }
+    }
+
+    fn update_coefficients(&mut self) {
+        let coeffs = T::coefficients(self.f, self.q, self.sr);
+        self.biquad
+            .set_coefficients(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4]);
+    }
+
+    pub(crate) fn set_frequency(&mut self, f: Precision) {
+        if f == self.f {
+            return;
+        }
+
+        self.f = f;
+        self.update_coefficients();
+    }
+
+    pub(crate) fn set_q(&mut self, q: Precision) {
+        if q == self.q {
+            return;
+        }
+
+        self.q = q;
+        self.update_coefficients();
+    }
+
+    pub(crate) fn set_sample_rate(&mut self, sr: Precision) {
+        if sr == self.sr {
+            return;
+        }
+
+        self.sr = sr;
+        self.update_coefficients();
+    }
+}
+
 pub(crate) struct ButterworthLP;
 
 impl FixedQFilterKind for ButterworthLP {
@@ -211,6 +273,72 @@ impl FixedQFilterKind for FirstOrderAP {
         let b2 = 0.0;
         let a1 = b;
         let a2 = 0.0;
+
+        [b0, b1, b2, a1, a2]
+    }
+}
+
+pub(crate) struct CookbookLP;
+
+impl GainlessFilterKind for CookbookLP {
+    fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 5] {
+        // code from https://github.com/robbert-vdh/nih-plug/blob/master/plugins/crossover/src/crossover/iir/biquad.rs
+
+        let omega0 = C::TAU * (f / sr);
+        let cos_omega0 = omega0.cos();
+        let alpha = omega0.sin() / (2.0 * q);
+
+        // We'll prenormalize everything with a0
+        let a0 = 1.0 + alpha;
+        let b0 = ((1.0 - cos_omega0) / 2.0) / a0;
+        let b1 = (1.0 - cos_omega0) / a0;
+        let b2 = ((1.0 - cos_omega0) / 2.0) / a0;
+        let a1 = (-2.0 * cos_omega0) / a0;
+        let a2 = (1.0 - alpha) / a0;
+
+        [b0, b1, b2, a1, a2]
+    }
+}
+
+pub(crate) struct CookbookHP;
+
+impl GainlessFilterKind for CookbookHP {
+    fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 5] {
+        // code from https://github.com/robbert-vdh/nih-plug/blob/master/plugins/crossover/src/crossover/iir/biquad.rs
+
+        let omega0 = C::TAU * (f / sr);
+        let cos_omega0 = omega0.cos();
+        let alpha = omega0.sin() / (2.0 * q);
+
+        // We'll prenormalize everything with a0
+        let a0 = 1.0 + alpha;
+        let b0 = ((1.0 + cos_omega0) / 2.0) / a0;
+        let b1 = -(1.0 + cos_omega0) / a0;
+        let b2 = ((1.0 + cos_omega0) / 2.0) / a0;
+        let a1 = (-2.0 * cos_omega0) / a0;
+        let a2 = (1.0 - alpha) / a0;
+
+        [b0, b1, b2, a1, a2]
+    }
+}
+
+pub(crate) struct CookbookAP;
+
+impl GainlessFilterKind for CookbookAP {
+    fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 5] {
+        // code from https://github.com/robbert-vdh/nih-plug/blob/master/plugins/crossover/src/crossover/iir/biquad.rs
+
+        let omega0 = C::TAU * (f / sr);
+        let cos_omega0 = omega0.cos();
+        let alpha = omega0.sin() / (2.0 * q);
+
+        // We'll prenormalize everything with a0
+        let a0 = 1.0 + alpha;
+        let b0 = (1.0 - alpha) / a0;
+        let b1 = (-2.0 * cos_omega0) / a0;
+        let b2 = (1.0 + alpha) / a0;
+        let a1 = (-2.0 * cos_omega0) / a0;
+        let a2 = (1.0 - alpha) / a0;
 
         [b0, b1, b2, a1, a2]
     }
