@@ -66,12 +66,12 @@ impl Svf {
     }
 }
 
-pub(crate) trait PassFilterKind {
+pub(crate) trait GainlessFilterKind {
     fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 6];
 }
 
-/// Filter for *-pass filters, e.g. low-pass, high-pass, all-pass
-pub(crate) struct PassFilter<T: PassFilterKind> {
+/// E.g. low-pass, high-pass, all-pass, notch, peak
+pub(crate) struct GainlessFilter<T: GainlessFilterKind> {
     svf: Svf,
     f: Precision,
     q: Precision,
@@ -79,7 +79,7 @@ pub(crate) struct PassFilter<T: PassFilterKind> {
     kind: std::marker::PhantomData<T>,
 }
 
-impl<T: PassFilterKind> PassFilter<T> {
+impl<T: GainlessFilterKind> GainlessFilter<T> {
     pub(crate) fn process_sample(&mut self, x0: Precision) -> Precision {
         self.svf.process_sample(x0)
     }
@@ -136,7 +136,7 @@ impl<T: PassFilterKind> PassFilter<T> {
 
 pub(crate) struct LowPass;
 
-impl PassFilterKind for LowPass {
+impl GainlessFilterKind for LowPass {
     fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 6] {
         let g = (C::PI * f / sr).tan();
         let k = 1.0 / q;
@@ -153,7 +153,7 @@ impl PassFilterKind for LowPass {
 
 pub(crate) struct HighPass;
 
-impl PassFilterKind for HighPass {
+impl GainlessFilterKind for HighPass {
     fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 6] {
         let g = (C::PI * f / sr).tan();
         let k = 1.0 / q;
@@ -170,7 +170,7 @@ impl PassFilterKind for HighPass {
 
 pub(crate) struct BandPass;
 
-impl PassFilterKind for BandPass {
+impl GainlessFilterKind for BandPass {
     fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 6] {
         let g = (C::PI * f / sr).tan();
         let k = 1.0 / q;
@@ -187,7 +187,7 @@ impl PassFilterKind for BandPass {
 
 pub(crate) struct Notch;
 
-impl PassFilterKind for Notch {
+impl GainlessFilterKind for Notch {
     fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 6] {
         let g = (C::PI * f / sr).tan();
         let k = 1.0 / q;
@@ -204,7 +204,7 @@ impl PassFilterKind for Notch {
 
 pub(crate) struct Peak;
 
-impl PassFilterKind for Peak {
+impl GainlessFilterKind for Peak {
     fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 6] {
         let g = (C::PI * f / sr).tan();
         let k = 1.0 / q;
@@ -221,7 +221,7 @@ impl PassFilterKind for Peak {
 
 pub(crate) struct AllPass;
 
-impl PassFilterKind for AllPass {
+impl GainlessFilterKind for AllPass {
     fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 6] {
         let g = (C::PI * f / sr).tan();
         let k = 1.0 / q;
