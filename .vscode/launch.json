@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Reaper",
+      "cargo": {
+        "args": ["build"],
+        "filter": {
+          "name": "sai_sampler",
+          "kind": "bin"
+        }
+      },
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
