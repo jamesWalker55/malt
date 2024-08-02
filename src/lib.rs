@@ -7,7 +7,6 @@ mod voice;
 
 use biquad::{
     ButterworthLPF, FirstOrderAPF, FirstOrderLPF, FixedQFilter, LinkwitzRileyHPF, LinkwitzRileyLPF,
-    Precision,
 };
 use envelope::Envelope;
 use nih_plug::{buffer::ChannelSamples, prelude::*};
@@ -263,10 +262,10 @@ impl Plugin for SaiSampler {
             }
 
             // update filter frequency
-            self.lpf_l.set_frequency(low_crossover as Precision);
-            self.lpf_r.set_frequency(low_crossover as Precision);
-            self.hpf_l.set_frequency(low_crossover as Precision);
-            self.hpf_r.set_frequency(low_crossover as Precision);
+            self.lpf_l.set_frequency(low_crossover.into());
+            self.lpf_r.set_frequency(low_crossover.into());
+            self.hpf_l.set_frequency(low_crossover.into());
+            self.hpf_r.set_frequency(low_crossover.into());
 
             // left channel
             {
@@ -279,8 +278,8 @@ impl Plugin for SaiSampler {
                 // *sample = delayed_sample;
 
                 // process delayed sample
-                let hpf_sample = self.hpf_l.process_sample(delayed_sample as Precision);
-                let lpf_sample = self.lpf_l.process_sample(delayed_sample as Precision);
+                let hpf_sample = self.hpf_l.process_sample(delayed_sample.into());
+                let lpf_sample = self.lpf_l.process_sample(delayed_sample.into());
 
                 // return to sender
                 *sample = (lpf_sample - hpf_sample) as f32;
@@ -297,8 +296,8 @@ impl Plugin for SaiSampler {
                 // *sample = delayed_sample;
 
                 // process delayed sample
-                let hpf_sample = self.hpf_r.process_sample(delayed_sample as Precision);
-                let lpf_sample = self.lpf_r.process_sample(delayed_sample as Precision);
+                let hpf_sample = self.hpf_r.process_sample(delayed_sample.into());
+                let lpf_sample = self.lpf_r.process_sample(delayed_sample.into());
 
                 // return to sender
                 *sample = (lpf_sample - hpf_sample) as f32;
@@ -317,7 +316,7 @@ impl Plugin for SaiSampler {
             } else {
                 0.0
             };
-            env_val = self.env_filter.process_sample(env_val as Precision) as f32;
+            env_val = self.env_filter.process_sample(env_val.into()) as f32;
             for sample in channel_samples {
                 *sample = *sample * db_to_gain((env_val as f32) * gain_reduction_db);
                 amplitude += sample.abs();
