@@ -125,9 +125,9 @@ impl<T: FixedQFilterKind> FixedQFilter<T> {
     }
 }
 
-pub(crate) struct ButterworthLPF;
+pub(crate) struct ButterworthLP;
 
-impl FixedQFilterKind for ButterworthLPF {
+impl FixedQFilterKind for ButterworthLP {
     fn coefficients(f: Precision, sr: Precision) -> [Precision; 5] {
         // Code from https://github.com/dimtass/DSP-Cpp-filters
         let c = 1.0 / (C::PI * f / sr).tan();
@@ -141,9 +141,9 @@ impl FixedQFilterKind for ButterworthLPF {
     }
 }
 
-pub(crate) struct LinkwitzRileyLPF;
+pub(crate) struct LinkwitzRileyLP;
 
-impl FixedQFilterKind for LinkwitzRileyLPF {
+impl FixedQFilterKind for LinkwitzRileyLP {
     fn coefficients(f: Precision, sr: Precision) -> [Precision; 5] {
         // Code from https://github.com/dimtass/DSP-Cpp-filters
         let th = C::PI * f / sr;
@@ -161,9 +161,9 @@ impl FixedQFilterKind for LinkwitzRileyLPF {
     }
 }
 
-pub(crate) struct LinkwitzRileyHPF;
+pub(crate) struct LinkwitzRileyHP;
 
-impl FixedQFilterKind for LinkwitzRileyHPF {
+impl FixedQFilterKind for LinkwitzRileyHP {
     fn coefficients(f: Precision, sr: Precision) -> [Precision; 5] {
         // Code from https://github.com/dimtass/DSP-Cpp-filters
         let th = C::PI * f / sr;
@@ -181,9 +181,9 @@ impl FixedQFilterKind for LinkwitzRileyHPF {
     }
 }
 
-pub(crate) struct FirstOrderLPF;
+pub(crate) struct FirstOrderLP;
 
-impl FixedQFilterKind for FirstOrderLPF {
+impl FixedQFilterKind for FirstOrderLP {
     fn coefficients(f: Precision, sr: Precision) -> [Precision; 5] {
         // Code from https://github.com/dimtass/DSP-Cpp-filters
         let th = 2.0 * C::PI * f / sr;
@@ -198,9 +198,9 @@ impl FixedQFilterKind for FirstOrderLPF {
     }
 }
 
-pub(crate) struct FirstOrderAPF;
+pub(crate) struct FirstOrderAP;
 
-impl FixedQFilterKind for FirstOrderAPF {
+impl FixedQFilterKind for FirstOrderAP {
     fn coefficients(f: Precision, sr: Precision) -> [Precision; 5] {
         // Code from https://github.com/dimtass/DSP-Cpp-filters
         let b = ((C::PI * f / sr).tan() - 1.0) / ((C::PI * f / sr).tan() + 1.0);

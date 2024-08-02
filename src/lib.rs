@@ -6,7 +6,7 @@ mod pattern;
 mod voice;
 
 use biquad::{
-    ButterworthLPF, FirstOrderAPF, FirstOrderLPF, FixedQFilter, LinkwitzRileyHPF, LinkwitzRileyLPF,
+    ButterworthLP, FirstOrderAP, FirstOrderLP, FixedQFilter, LinkwitzRileyHP, LinkwitzRileyLP,
 };
 use envelope::Envelope;
 use nih_plug::{buffer::ChannelSamples, prelude::*};
@@ -21,13 +21,13 @@ pub struct SaiSampler {
     sr: f32,
     latency_seconds: f32,
     latency_samples: u32,
-    lpf_l: FixedQFilter<LinkwitzRileyLPF>,
-    lpf_r: FixedQFilter<LinkwitzRileyLPF>,
-    hpf_l: FixedQFilter<LinkwitzRileyHPF>,
-    hpf_r: FixedQFilter<LinkwitzRileyHPF>,
+    lpf_l: FixedQFilter<LinkwitzRileyLP>,
+    lpf_r: FixedQFilter<LinkwitzRileyLP>,
+    hpf_l: FixedQFilter<LinkwitzRileyHP>,
+    hpf_r: FixedQFilter<LinkwitzRileyHP>,
     buf: AllocRingBuffer<f32>,
     env: Option<Envelope>,
-    env_filter: FixedQFilter<FirstOrderLPF>,
+    env_filter: FixedQFilter<FirstOrderLP>,
 
     /// The editor state, saved together with the parameter state so the custom scaling can be
     /// restored.
