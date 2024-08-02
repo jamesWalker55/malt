@@ -228,3 +228,58 @@ impl FirstOrderLPF {
             .set_coefficients(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4]);
     }
 }
+
+pub(crate) struct FirstOrderAPF {
+    biquad: Biquad,
+    f: Precision,
+    sr: Precision,
+}
+
+impl FirstOrderAPF {
+    pub(crate) fn coefficients(fc: Precision, fs: Precision) -> [Precision; 5] {
+        // Code from https://github.com/dimtass/DSP-Cpp-filters
+        let b = ((C::PI * fc / fs).tan() - 1.0) / ((C::PI * fc / fs).tan() + 1.0);
+        let b0 = b;
+        let b1 = 1.0;
+        let b2 = 0.0;
+        let a1 = b;
+        let a2 = 0.0;
+
+        [b0, b1, b2, a1, a2]
+    }
+
+    pub(crate) fn process_sample(&mut self, x0: Precision) -> Precision {
+        self.biquad.process_sample(x0)
+    }
+
+    pub(crate) fn new(frequency: Precision, sample_rate: Precision) -> Self {
+        let coeffs = Self::coefficients(frequency, sample_rate);
+        Self {
+            biquad: Biquad::new(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4]),
+            f: frequency,
+            sr: sample_rate,
+        }
+    }
+
+    pub(crate) fn set_frequency(&mut self, f: Precision) {
+        if f == self.f {
+            return;
+        }
+
+        self.f = f;
+        let coeffs = Self::coefficients(f, self.sr);
+        self.biquad
+            .set_coefficients(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4]);
+    }
+
+    pub(crate) fn set_sample_rate(&mut self, sr: Precision) {
+        if sr == self.sr {
+            return;
+        }
+
+        self.sr = sr;
+        let coeffs = Self::coefficients(self.f, sr);
+        self.biquad
+            .set_coefficients(coeffs[0], coeffs[1], coeffs[2], coeffs[3], coeffs[4]);
+    }
+}
