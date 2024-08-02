@@ -150,3 +150,88 @@ impl PassFilterKind for LowPass {
         [a1, a2, a3, m0, m1, m2]
     }
 }
+
+pub(crate) struct HighPass;
+
+impl PassFilterKind for HighPass {
+    fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 6] {
+        let g = (C::PI * f / sr).tan();
+        let k = 1.0 / q;
+        let a1 = 1.0 / (1.0 + g * (g + k));
+        let a2 = g * a1;
+        let a3 = g * a2;
+        let m0 = 1.0;
+        let m1 = -k;
+        let m2 = -1.0;
+
+        [a1, a2, a3, m0, m1, m2]
+    }
+}
+
+pub(crate) struct BandPass;
+
+impl PassFilterKind for BandPass {
+    fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 6] {
+        let g = (C::PI * f / sr).tan();
+        let k = 1.0 / q;
+        let a1 = 1.0 / (1.0 + g * (g + k));
+        let a2 = g * a1;
+        let a3 = g * a2;
+        let m0 = 0.0;
+        let m1 = 1.0;
+        let m2 = 0.0;
+
+        [a1, a2, a3, m0, m1, m2]
+    }
+}
+
+pub(crate) struct Notch;
+
+impl PassFilterKind for Notch {
+    fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 6] {
+        let g = (C::PI * f / sr).tan();
+        let k = 1.0 / q;
+        let a1 = 1.0 / (1.0 + g * (g + k));
+        let a2 = g * a1;
+        let a3 = g * a2;
+        let m0 = 1.0;
+        let m1 = -k;
+        let m2 = 0.0;
+
+        [a1, a2, a3, m0, m1, m2]
+    }
+}
+
+pub(crate) struct Peak;
+
+impl PassFilterKind for Peak {
+    fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 6] {
+        let g = (C::PI * f / sr).tan();
+        let k = 1.0 / q;
+        let a1 = 1.0 / (1.0 + g * (g + k));
+        let a2 = g * a1;
+        let a3 = g * a2;
+        let m0 = 1.0;
+        let m1 = -k;
+        let m2 = -2.0;
+
+        [a1, a2, a3, m0, m1, m2]
+    }
+}
+
+pub(crate) struct AllPass;
+
+impl PassFilterKind for AllPass {
+    fn coefficients(f: Precision, q: Precision, sr: Precision) -> [Precision; 6] {
+        let g = (C::PI * f / sr).tan();
+        let k = 1.0 / q;
+        let a1 = 1.0 / (1.0 + g * (g + k));
+        let a2 = g * a1;
+        let a3 = g * a2;
+        let m0 = 1.0;
+        let m1 = -2.0 * k;
+        let m2 = 0.0;
+
+        [a1, a2, a3, m0, m1, m2]
+    }
+}
