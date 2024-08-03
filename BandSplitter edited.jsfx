@@ -394,6 +394,7 @@ bufferDist  = 65536; // buffer length
 audioBufIn  = 0;
 audioBufOut = bufferDist;
 
+// storage for the FIR impulse response
 FIR1        = 2*bufferDist;
 FIR2        = 3*bufferDist;
 FIR3        = 4*bufferDist;
@@ -993,6 +994,7 @@ specBufferLoc = 17*bufferDist;
             /* Are we dealing with a FIR filter? */
             FIR ? (
               // CalcFIR
+              // clear buffers
               memset(FIR1, 0, bufferDist);
               memset(FIR2, 0, bufferDist);
               memset(FIR3, 0, bufferDist);
@@ -1001,7 +1003,7 @@ specBufferLoc = 17*bufferDist;
 
               this.resetFilters();
 
-              /* Fetch impulse response */
+              /* Fetch impulse response location */
               fptr1 = FIR1;
               fptr2 = FIR2;
               fptr3 = FIR3;
