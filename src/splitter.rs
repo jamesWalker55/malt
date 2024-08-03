@@ -206,12 +206,16 @@ impl DynamicThreeBand24Slope {
         let high_gain_relative = db_to_gain(high_gain_db_relative) as f64;
         let low_gain_relative = db_to_gain(low_gain_db_relative) as f64;
 
-        sample = sample * mid_gain;
-
+        // process shelf eqs first, using original volume
         self.lowshelf.set_gain(low_gain_relative);
         self.highshelf.set_gain(high_gain_relative);
+        sample = self
+            .highshelf
+            .process_sample(self.lowshelf.process_sample(sample));
 
-        self.highshelf
-            .process_sample(self.lowshelf.process_sample(sample))
+        // then process with manual overall gain
+        sample = sample * mid_gain;
+
+        sample
     }
 }
