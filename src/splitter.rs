@@ -197,9 +197,9 @@ impl DynamicThreeBand24Slope {
     ) -> Precision {
         // input gains are scalar, convert to db and do calculations
         let gains_db = gains.map(|x| gain_to_db(x as f32));
-        let mid_gain_db = (gains_db[1]).clamp(-90.0, 90.0);
-        let high_gain_db_relative = (gains_db[2] - gains_db[1]).clamp(-90.0, 90.0);
-        let low_gain_db_relative = (gains_db[0] - gains_db[1]).clamp(-90.0, 90.0);
+        let mid_gain_db = (gains_db[1]).clamp(-60.0, 60.0);
+        let high_gain_db_relative = (gains_db[2] - mid_gain_db).clamp(-60.0, 60.0);
+        let low_gain_db_relative = (gains_db[0] - mid_gain_db).clamp(-60.0, 60.0);
 
         // the final scalar gain to use
         let mid_gain = db_to_gain(mid_gain_db) as f64;
