@@ -15,8 +15,8 @@ use nih_plug::{buffer::ChannelSamples, prelude::*};
 use nih_plug_egui::{create_egui_editor, egui, widgets, EguiState};
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
-use splitter::MinimumThreeBand24Slope;
-use splitter::MinimumTwoBand12Slope;
+use splitter::MinimumThreeBand12Slope;
+use splitter::MinimumTwoBand24Slope;
 use std::sync::Arc;
 use util::{db_to_gain, gain_to_db};
 
@@ -25,8 +25,8 @@ pub struct SaiSampler {
     sr: f32,
     latency_seconds: f32,
     latency_samples: u32,
-    splitter_l: MinimumTwoBand12Slope,
-    splitter_r: MinimumThreeBand24Slope,
+    splitter_l: MinimumTwoBand24Slope,
+    splitter_r: MinimumThreeBand12Slope,
     buf: AllocRingBuffer<f32>,
     env: Option<Envelope>,
     env_filter: FixedQFilter<FirstOrderLP>,
@@ -51,8 +51,8 @@ impl Default for SaiSampler {
             sr: 0.0,
             latency_seconds: 0.0,
             latency_samples: 0,
-            splitter_l: MinimumTwoBand12Slope::new(0.0, 0.0),
-            splitter_r: MinimumThreeBand24Slope::new(0.0, 0.0, 0.0),
+            splitter_l: MinimumTwoBand24Slope::new(0.0, 0.0),
+            splitter_r: MinimumThreeBand12Slope::new(0.0, 0.0, 0.0),
             buf: AllocRingBuffer::new(1),
             env: None,
             env_filter: FixedQFilter::new(0.0, 0.0),
@@ -234,8 +234,8 @@ impl Plugin for SaiSampler {
         };
 
         // setup filters
-        self.splitter_l = MinimumTwoBand12Slope::new(1000.0, self.sr.into());
-        self.splitter_r = MinimumThreeBand24Slope::new(1000.0, 2000.0, self.sr.into());
+        self.splitter_l = MinimumTwoBand24Slope::new(1000.0, self.sr.into());
+        self.splitter_r = MinimumThreeBand12Slope::new(1000.0, 2000.0, self.sr.into());
 
         // clear envelope
         self.env = None;
@@ -328,9 +328,10 @@ impl Plugin for SaiSampler {
                 // *sample = delayed_sample;
 
                 // process delayed sample
-                *sample =
-                    self.splitter_l
-                        .apply_gain(delayed_sample as f64, &[1.0, 1.0]) as f32;
+                *sample = self
+                    .splitter_l
+                    .apply_gain(delayed_sample as f64, &[low_gain, mid_gain])
+                    as f32;
             }
 
             // right channel
