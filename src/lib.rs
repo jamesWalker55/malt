@@ -15,6 +15,7 @@ use nih_plug::{buffer::ChannelSamples, prelude::*};
 use nih_plug_egui::{create_egui_editor, egui, widgets, EguiState};
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
+use splitter::MinimumThreeBand12Slope;
 use splitter::MinimumTwoBand12Slope;
 use std::sync::Arc;
 use util::{db_to_gain, gain_to_db};
@@ -25,7 +26,7 @@ pub struct SaiSampler {
     latency_seconds: f32,
     latency_samples: u32,
     splitter_l: MinimumTwoBand12Slope,
-    splitter_r: MinimumTwoBand12Slope,
+    splitter_r: MinimumThreeBand12Slope,
     buf: AllocRingBuffer<f32>,
     env: Option<Envelope>,
     env_filter: FixedQFilter<FirstOrderLP>,
@@ -51,7 +52,7 @@ impl Default for SaiSampler {
             latency_seconds: 0.0,
             latency_samples: 0,
             splitter_l: MinimumTwoBand12Slope::new(0.0, 0.0),
-            splitter_r: MinimumTwoBand12Slope::new(0.0, 0.0),
+            splitter_r: MinimumThreeBand12Slope::new(0.0, 0.0, 0.0),
             buf: AllocRingBuffer::new(1),
             env: None,
             env_filter: FixedQFilter::new(0.0, 0.0),
@@ -192,7 +193,7 @@ impl Plugin for SaiSampler {
 
         // setup filters
         self.splitter_l = MinimumTwoBand12Slope::new(1000.0, self.sr.into());
-        self.splitter_r = MinimumTwoBand12Slope::new(1000.0, self.sr.into());
+        self.splitter_r = MinimumThreeBand12Slope::new(1000.0, 2000.0, self.sr.into());
 
         // clear envelope
         self.env = None;
@@ -225,7 +226,15 @@ impl Plugin for SaiSampler {
             let precomp = self.params.precomp.smoothed.next() / 1000.0;
             let release = self.params.release.smoothed.next() / 1000.0;
             let low_crossover = self.params.low_crossover.smoothed.next();
-            let high_crossover = self.params.high_crossover.smoothed.next();
+            // limit high crossover to be 1 octave above low crossover
+            // (this is pro-mb's behaviour)
+            let min_high_crossover = low_crossover * 2.0;
+            let high_crossover = self
+                .params
+                .high_crossover
+                .smoothed
+                .next()
+                .max(min_high_crossover);
 
             debug_assert!(precomp <= self.latency_seconds);
 
@@ -260,7 +269,8 @@ impl Plugin for SaiSampler {
 
             // update filter frequency
             self.splitter_l.set_frequency(low_crossover.into());
-            self.splitter_r.set_frequency(low_crossover.into());
+            self.splitter_r
+                .set_frequencies(low_crossover.into(), high_crossover.into());
 
             // left channel
             {
@@ -289,9 +299,10 @@ impl Plugin for SaiSampler {
                 // *sample = delayed_sample;
 
                 // process delayed sample
-                *sample =
-                    self.splitter_r
-                        .apply_gain(delayed_sample as f64, &[1.0, 1.0]) as f32;
+                *sample = self
+                    .splitter_r
+                    .apply_gain(delayed_sample as f64, &[1.0, 1.0, 1.0])
+                    as f32;
             }
 
             // test process envelope

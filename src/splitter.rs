@@ -1,5 +1,8 @@
-use crate::biquad::{
-    CookbookHP, CookbookLP, FixedQFilter, GainlessFilter, LinkwitzRileyHP, LinkwitzRileyLP,
+use crate::{
+    biquad::{
+        CookbookHP, CookbookLP, FixedQFilter, GainlessFilter, LinkwitzRileyHP, LinkwitzRileyLP,
+    },
+    svf::{self, AllPass},
 };
 
 type Precision = f64;
@@ -67,5 +70,46 @@ impl MinimumTwoBand12Slope {
     pub(crate) fn apply_gain(&mut self, sample: Precision, gains: &[Precision; 2]) -> Precision {
         let [low, high] = self.split_bands(sample);
         low * gains[0] + high * gains[1]
+    }
+}
+
+pub(crate) struct MinimumThreeBand12Slope {
+    lpf1: FixedQFilter<LinkwitzRileyLP>,
+    hpf1: FixedQFilter<LinkwitzRileyHP>,
+    lpf2: FixedQFilter<LinkwitzRileyLP>,
+    hpf2: FixedQFilter<LinkwitzRileyHP>,
+    apf: svf::GainlessFilter<AllPass>,
+}
+
+impl MinimumThreeBand12Slope {
+    pub(crate) fn new(crossover1: Precision, crossover2: Precision, sr: Precision) -> Self {
+        Self {
+            apf: svf::GainlessFilter::new(crossover2, std::f64::consts::FRAC_1_SQRT_2, sr),
+            lpf1: FixedQFilter::new(crossover1, sr),
+            hpf1: FixedQFilter::new(crossover1, sr),
+            lpf2: FixedQFilter::new(crossover2, sr),
+            hpf2: FixedQFilter::new(crossover2, sr),
+        }
+    }
+
+    pub(crate) fn set_frequencies(&mut self, f1: Precision, f2: Precision) {
+        self.apf.set_frequency(f2.into());
+        self.lpf1.set_frequency(f1.into());
+        self.hpf1.set_frequency(f1.into());
+        self.lpf2.set_frequency(f2.into());
+        self.hpf2.set_frequency(f2.into());
+    }
+
+    pub(crate) fn split_bands(&mut self, sample: Precision) -> [Precision; 3] {
+        let low = self.lpf1.process_sample(sample);
+        let midhigh = -self.hpf1.process_sample(sample);
+        let mid = self.lpf2.process_sample(midhigh);
+        let high = -self.hpf2.process_sample(midhigh);
+        [low, mid, high]
+    }
+
+    pub(crate) fn apply_gain(&mut self, sample: Precision, gains: &[Precision; 3]) -> Precision {
+        let [low, mid, high] = self.split_bands(sample);
+        low * gains[0] + mid * gains[1] + high * gains[2]
     }
 }
