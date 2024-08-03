@@ -15,8 +15,8 @@ use nih_plug::{buffer::ChannelSamples, prelude::*};
 use nih_plug_egui::{create_egui_editor, egui, widgets, EguiState};
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
+use splitter::DynamicThreeBand24Slope;
 use splitter::MinimumThreeBand12Slope;
-use splitter::MinimumTwoBand24Slope;
 use std::sync::Arc;
 use util::{db_to_gain, gain_to_db};
 
@@ -25,7 +25,7 @@ pub struct SaiSampler {
     sr: f32,
     latency_seconds: f32,
     latency_samples: u32,
-    splitter_l: MinimumTwoBand24Slope,
+    splitter_l: DynamicThreeBand24Slope,
     splitter_r: MinimumThreeBand12Slope,
     buf: AllocRingBuffer<f32>,
     env: Option<Envelope>,
@@ -51,7 +51,7 @@ impl Default for SaiSampler {
             sr: 0.0,
             latency_seconds: 0.0,
             latency_samples: 0,
-            splitter_l: MinimumTwoBand24Slope::new(0.0, 0.0),
+            splitter_l: DynamicThreeBand24Slope::new(0.0, 0.0, 0.0),
             splitter_r: MinimumThreeBand12Slope::new(0.0, 0.0, 0.0),
             buf: AllocRingBuffer::new(1),
             env: None,
@@ -234,7 +234,7 @@ impl Plugin for SaiSampler {
         };
 
         // setup filters
-        self.splitter_l = MinimumTwoBand24Slope::new(1000.0, self.sr.into());
+        self.splitter_l = DynamicThreeBand24Slope::new(1000.0, 2000.0, self.sr.into());
         self.splitter_r = MinimumThreeBand12Slope::new(1000.0, 2000.0, self.sr.into());
 
         // clear envelope
@@ -313,7 +313,8 @@ impl Plugin for SaiSampler {
             }
 
             // update filter frequency
-            self.splitter_l.set_frequency(low_crossover.into());
+            self.splitter_l
+                .set_frequencies(low_crossover.into(), high_crossover.into());
             self.splitter_r
                 .set_frequencies(low_crossover.into(), high_crossover.into());
 
@@ -330,7 +331,7 @@ impl Plugin for SaiSampler {
                 // process delayed sample
                 *sample = self
                     .splitter_l
-                    .apply_gain(delayed_sample as f64, &[low_gain, mid_gain])
+                    .apply_gain(delayed_sample as f64, &[low_gain, mid_gain, high_gain])
                     as f32;
             }
 

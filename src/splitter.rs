@@ -1,9 +1,11 @@
+use nih_plug::util::{db_to_gain, gain_to_db};
+
 use crate::{
     biquad::{
         CookbookAP, CookbookHP, CookbookLP, FirstOrderAP, FixedQFilter, GainlessFilter,
         LinkwitzRileyHP, LinkwitzRileyLP,
     },
-    svf::{self, AllPass},
+    svf::{self, AllPass, GainFilter, HighShelf, LowShelf},
 };
 
 type Precision = f64;
@@ -167,5 +169,49 @@ impl MinimumThreeBand24Slope {
     pub(crate) fn apply_gain(&mut self, sample: Precision, gains: &[Precision; 3]) -> Precision {
         let [low, mid, high] = self.split_bands(sample);
         low * gains[0] + mid * gains[1] + high * gains[2]
+    }
+}
+
+pub(crate) struct DynamicThreeBand24Slope {
+    lowshelf: GainFilter<LowShelf>,
+    highshelf: GainFilter<HighShelf>,
+}
+
+impl DynamicThreeBand24Slope {
+    pub(crate) fn new(crossover1: Precision, crossover2: Precision, sr: Precision) -> Self {
+        Self {
+            lowshelf: GainFilter::new(crossover1, std::f64::consts::FRAC_1_SQRT_2, 1.0, sr),
+            highshelf: GainFilter::new(crossover2, std::f64::consts::FRAC_1_SQRT_2, 1.0, sr),
+        }
+    }
+
+    pub(crate) fn set_frequencies(&mut self, f1: Precision, f2: Precision) {
+        self.lowshelf.set_frequency(f1.into());
+        self.highshelf.set_frequency(f2.into());
+    }
+
+    pub(crate) fn apply_gain(
+        &mut self,
+        mut sample: Precision,
+        gains: &[Precision; 3],
+    ) -> Precision {
+        // input gains are scalar, convert to db and do calculations
+        let gains_db = gains.map(|x| gain_to_db(x as f32));
+        let mid_gain_db = (gains_db[1]).max(-90.0);
+        let high_gain_db_relative = (gains_db[2] - gains_db[1]).max(-90.0);
+        let low_gain_db_relative = (gains_db[0] - gains_db[1]).max(-90.0);
+
+        // the final scalar gain to use
+        let mid_gain = db_to_gain(mid_gain_db) as f64;
+        let high_gain_relative = db_to_gain(high_gain_db_relative) as f64;
+        let low_gain_relative = db_to_gain(low_gain_db_relative) as f64;
+
+        sample = sample * mid_gain;
+
+        self.lowshelf.set_gain(low_gain_relative);
+        self.highshelf.set_gain(high_gain_relative);
+
+        self.highshelf
+            .process_sample(self.lowshelf.process_sample(sample))
     }
 }
