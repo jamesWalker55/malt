@@ -3,9 +3,9 @@ mod envelope;
 mod oscillator;
 mod parameter_formatters;
 mod pattern;
+mod splitter;
 mod svf;
 mod voice;
-mod splitter;
 
 use biquad::{
     ButterworthLP, FirstOrderAP, FirstOrderLP, FixedQFilter, LinkwitzRileyHP, LinkwitzRileyLP,
@@ -15,6 +15,7 @@ use nih_plug::{buffer::ChannelSamples, prelude::*};
 use nih_plug_egui::{create_egui_editor, egui, widgets, EguiState};
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
+use splitter::MinimumTwoBand24Slope;
 use std::sync::Arc;
 use util::{db_to_gain, gain_to_db};
 
@@ -23,10 +24,8 @@ pub struct SaiSampler {
     sr: f32,
     latency_seconds: f32,
     latency_samples: u32,
-    lpf_l: FixedQFilter<LinkwitzRileyLP>,
-    lpf_r: FixedQFilter<LinkwitzRileyLP>,
-    hpf_l: FixedQFilter<LinkwitzRileyHP>,
-    hpf_r: FixedQFilter<LinkwitzRileyHP>,
+    splitter_l: MinimumTwoBand24Slope,
+    splitter_r: MinimumTwoBand24Slope,
     buf: AllocRingBuffer<f32>,
     env: Option<Envelope>,
     env_filter: FixedQFilter<FirstOrderLP>,
@@ -51,10 +50,8 @@ impl Default for SaiSampler {
             sr: 0.0,
             latency_seconds: 0.0,
             latency_samples: 0,
-            lpf_l: FixedQFilter::new(0.0, 0.0),
-            lpf_r: FixedQFilter::new(0.0, 0.0),
-            hpf_l: FixedQFilter::new(0.0, 0.0),
-            hpf_r: FixedQFilter::new(0.0, 0.0),
+            splitter_l: MinimumTwoBand24Slope::new(0.0, 0.0),
+            splitter_r: MinimumTwoBand24Slope::new(0.0, 0.0),
             buf: AllocRingBuffer::new(1),
             env: None,
             env_filter: FixedQFilter::new(0.0, 0.0),
@@ -194,10 +191,8 @@ impl Plugin for SaiSampler {
         };
 
         // setup filters
-        self.lpf_l = FixedQFilter::new(1000.0, self.sr.into());
-        self.lpf_r = FixedQFilter::new(1000.0, self.sr.into());
-        self.hpf_l = FixedQFilter::new(1000.0, self.sr.into());
-        self.hpf_r = FixedQFilter::new(1000.0, self.sr.into());
+        self.splitter_l = MinimumTwoBand24Slope::new(1000.0, self.sr.into());
+        self.splitter_r = MinimumTwoBand24Slope::new(1000.0, self.sr.into());
 
         // clear envelope
         self.env = None;
@@ -264,10 +259,8 @@ impl Plugin for SaiSampler {
             }
 
             // update filter frequency
-            self.lpf_l.set_frequency(low_crossover.into());
-            self.lpf_r.set_frequency(low_crossover.into());
-            self.hpf_l.set_frequency(low_crossover.into());
-            self.hpf_r.set_frequency(low_crossover.into());
+            self.splitter_l.set_frequency(low_crossover.into());
+            self.splitter_r.set_frequency(low_crossover.into());
 
             // left channel
             {
@@ -280,11 +273,9 @@ impl Plugin for SaiSampler {
                 // *sample = delayed_sample;
 
                 // process delayed sample
-                let hpf_sample = self.hpf_l.process_sample(delayed_sample.into());
-                let lpf_sample = self.lpf_l.process_sample(delayed_sample.into());
-
-                // return to sender
-                *sample = (lpf_sample - hpf_sample) as f32;
+                *sample =
+                    self.splitter_l
+                        .apply_gain(delayed_sample as f64, &[1.0, 1.0]) as f32;
             }
 
             // right channel
@@ -298,11 +289,9 @@ impl Plugin for SaiSampler {
                 // *sample = delayed_sample;
 
                 // process delayed sample
-                let hpf_sample = self.hpf_r.process_sample(delayed_sample.into());
-                let lpf_sample = self.lpf_r.process_sample(delayed_sample.into());
-
-                // return to sender
-                *sample = (lpf_sample - hpf_sample) as f32;
+                *sample =
+                    self.splitter_r
+                        .apply_gain(delayed_sample as f64, &[1.0, 1.0]) as f32;
             }
 
             // test process envelope
