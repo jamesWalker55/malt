@@ -278,8 +278,8 @@ impl Plugin for SaiSampler {
                 .params
                 .high_crossover
                 .smoothed
-                .next();
-                // .max(min_high_crossover);
+                .next()
+                .max(min_high_crossover);
 
             debug_assert!(precomp <= self.latency_seconds);
 
