@@ -75,6 +75,12 @@ struct SaiSamplerParams {
     pub low_crossover: FloatParam,
     #[id = "high_crossover"]
     pub high_crossover: FloatParam,
+    #[id = "low_gain"]
+    pub low_gain: FloatParam,
+    #[id = "mid_gain"]
+    pub mid_gain: FloatParam,
+    #[id = "high_gain"]
+    pub high_gain: FloatParam,
 }
 
 impl Default for SaiSamplerParams {
@@ -136,6 +142,42 @@ impl Default for SaiSamplerParams {
             )
             .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
             .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
+            low_gain: FloatParam::new(
+                "Low gain",
+                db_to_gain(0.0),
+                FloatRange::Skewed {
+                    min: 0.0,
+                    max: 1.0,
+                    factor: FloatRange::skew_factor(-1.2),
+                },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            mid_gain: FloatParam::new(
+                "Mid gain",
+                db_to_gain(0.0),
+                FloatRange::Skewed {
+                    min: 0.0,
+                    max: 1.0,
+                    factor: FloatRange::skew_factor(-1.2),
+                },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            high_gain: FloatParam::new(
+                "High gain",
+                db_to_gain(0.0),
+                FloatRange::Skewed {
+                    min: 0.0,
+                    max: 1.0,
+                    factor: FloatRange::skew_factor(-1.2),
+                },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
         }
     }
 }
@@ -223,6 +265,9 @@ impl Plugin for SaiSampler {
 
             // update params
             let gain_reduction_db = gain_to_db(self.params.gain_reduction.smoothed.next());
+            let low_gain = self.params.low_gain.smoothed.next() as f64;
+            let mid_gain = self.params.mid_gain.smoothed.next() as f64;
+            let high_gain = self.params.high_gain.smoothed.next() as f64;
             let precomp = self.params.precomp.smoothed.next() / 1000.0;
             let release = self.params.release.smoothed.next() / 1000.0;
             let low_crossover = self.params.low_crossover.smoothed.next();
@@ -301,7 +346,7 @@ impl Plugin for SaiSampler {
                 // process delayed sample
                 *sample = self
                     .splitter_r
-                    .apply_gain(delayed_sample as f64, &[1.0, 1.0, 1.0])
+                    .apply_gain(delayed_sample as f64, &[low_gain, mid_gain, high_gain])
                     as f32;
             }
 
@@ -397,6 +442,12 @@ impl Plugin for SaiSampler {
                         &params.high_crossover,
                         setter,
                     ));
+                    ui.label("low_gain");
+                    ui.add(widgets::ParamSlider::for_param(&params.low_gain, setter));
+                    ui.label("mid_gain");
+                    ui.add(widgets::ParamSlider::for_param(&params.mid_gain, setter));
+                    ui.label("high_gain");
+                    ui.add(widgets::ParamSlider::for_param(&params.high_gain, setter));
 
                     // ui.label(
                     //     "Also gain, but with a lame widget. Can't even render the value correctly!",
