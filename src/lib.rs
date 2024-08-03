@@ -5,6 +5,7 @@ mod parameter_formatters;
 mod pattern;
 mod svf;
 mod voice;
+mod splitter;
 
 use biquad::{
     ButterworthLP, FirstOrderAP, FirstOrderLP, FixedQFilter, LinkwitzRileyHP, LinkwitzRileyLP,
