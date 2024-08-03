@@ -1,7 +1,7 @@
 use crate::{
     biquad::{
-        CookbookHP, CookbookLP, FirstOrderAP, FixedQFilter, GainlessFilter, LinkwitzRileyHP,
-        LinkwitzRileyLP,
+        CookbookAP, CookbookHP, CookbookLP, FirstOrderAP, FixedQFilter, GainlessFilter,
+        LinkwitzRileyHP, LinkwitzRileyLP,
     },
     svf::{self, AllPass},
 };
@@ -124,6 +124,7 @@ pub(crate) struct MinimumThreeBand24Slope {
     hpf2: GainlessFilter<CookbookHP>,
     hpf3: GainlessFilter<CookbookHP>,
     hpf4: GainlessFilter<CookbookHP>,
+    apf: GainlessFilter<CookbookAP>,
 }
 
 impl MinimumThreeBand24Slope {
@@ -137,6 +138,7 @@ impl MinimumThreeBand24Slope {
             hpf2: GainlessFilter::new(crossover1, std::f64::consts::FRAC_1_SQRT_2, sr),
             hpf3: GainlessFilter::new(crossover2, std::f64::consts::FRAC_1_SQRT_2, sr),
             hpf4: GainlessFilter::new(crossover2, std::f64::consts::FRAC_1_SQRT_2, sr),
+            apf: GainlessFilter::new(crossover2, std::f64::consts::FRAC_1_SQRT_2, sr),
         }
     }
 
@@ -149,10 +151,13 @@ impl MinimumThreeBand24Slope {
         self.hpf2.set_frequency(f1.into());
         self.hpf3.set_frequency(f2.into());
         self.hpf4.set_frequency(f2.into());
+        self.apf.set_frequency(f2.into());
     }
 
     pub(crate) fn split_bands(&mut self, sample: Precision) -> [Precision; 3] {
-        let low = self.lpf2.process_sample(self.lpf1.process_sample(sample));
+        let low = self
+            .apf
+            .process_sample(self.lpf2.process_sample(self.lpf1.process_sample(sample)));
         let midhigh = self.hpf2.process_sample(self.hpf1.process_sample(sample));
         let mid = self.lpf4.process_sample(self.lpf3.process_sample(midhigh));
         let high = self.hpf4.process_sample(self.hpf3.process_sample(midhigh));
