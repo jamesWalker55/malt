@@ -61,7 +61,7 @@ impl Default for SaiSampler {
             env_filter: FixedQFilter::new(0.0, 0.0),
             // TEMP
             peak_meter: Arc::new(AtomicF32::new(util::MINUS_INFINITY_DB)),
-            editor_state: EguiState::from_size(300, 400),
+            editor_state: EguiState::from_size(gui::GUI_WIDTH, gui::GUI_HEIGHT),
         }
     }
 }

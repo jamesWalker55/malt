@@ -2,6 +2,10 @@ use crate::SaiSampler;
 use nih_plug::prelude::*;
 use nih_plug_egui::{create_egui_editor, egui, widgets};
 
+// the DPI-independent size of the window
+pub(crate) const GUI_WIDTH: u32 = 700;
+pub(crate) const GUI_HEIGHT: u32 = 700;
+
 pub(crate) fn create_gui(
     plugin: &mut SaiSampler,
     _async_executor: AsyncExecutor<SaiSampler>,
