@@ -62,8 +62,7 @@ pub(crate) fn create_gui(
                 .into();
 
                 // color styling
-                // style.visuals.panel_fill = Color32::from_rgb(255, 0, 0);
-                style.visuals.panel_fill = Color32::from_hex("#303030").unwrap();
+                style.visuals.panel_fill = Color32::from_rgb(48, 48, 48);
                 // style.wid
 
                 ctx.set_style(style);
@@ -110,33 +109,54 @@ pub(crate) fn create_gui(
                 .exact_height(HEADER_HEIGHT)
                 .frame(header_frame.clone())
                 .show(ctx, |ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        // Right side
-                        ui.allocate_ui_with_layout(
-                            egui::Vec2::new(0.0, HEADER_HEIGHT),
-                            egui::Layout::right_to_left(egui::Align::Center),
-                            |ui| {
-                                ui.label("///");
-                            },
-                        );
-                        // Left side
-                        ui.with_layout(
-                            egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
-                            |ui| {
-                                ui.columns(5, |cols| {
-                                    cols[0].centered_and_justified(|ui| ui.label("Trigger: MIDI"));
-                                    cols[1].centered_and_justified(|ui| ui.label("Lookahead: 10ms"));
-                                    cols[2].centered_and_justified(|ui| ui.label("Smooth: On"));
-                                    cols[3].centered_and_justified(|ui| ui.label("Bypass"));
-                                    cols[4].centered_and_justified(|ui| ui.label("Mix: 100%"));
-                                })
-                            },
-                        );
-                    })
-                });
-            egui::CentralPanel::default().show(ctx, |ui| {
-                // NOTE: See `plugins/diopser/src/editor.rs` for an example using the generic UI widget
+                    // Un-comment the surrounding code when you're able to implement window resizing
 
+                    // ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    //     // Right side
+                    //     ui.allocate_ui_with_layout(
+                    //         egui::Vec2::new(0.0, HEADER_HEIGHT),
+                    //         egui::Layout::right_to_left(egui::Align::Center),
+                    //         |ui| {
+                    //             ui.label("///");
+                    //         },
+                    //     );
+                    //     // Left side
+                    //     ui.with_layout(
+                    //         egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
+                    //         |ui| {
+                    ui.columns(5, |cols| {
+                        cols[0].centered_and_justified(|ui| ui.label("Trigger: MIDI"));
+                        cols[1].centered_and_justified(|ui| ui.label("Lookahead: 10ms"));
+                        cols[2].centered_and_justified(|ui| ui.label("Smooth: On"));
+                        cols[3].centered_and_justified(|ui| ui.label("Bypass"));
+                        cols[4].centered_and_justified(|ui| ui.label("Mix: 100%"));
+                    })
+                    //         },
+                    //     );
+                    // })
+                });
+
+            const BAND_WIDGET_WIDTH: f32 = 341.0;
+            const BAND_WIDGET_HEIGHT: f32 = 113.0;
+
+            // right-side controls (fixed width, variable height)
+            egui::SidePanel::right("controls_panel")
+                .exact_width(BAND_WIDGET_WIDTH)
+                .show_separator_line(false)
+                .resizable(false)
+                .frame(egui::Frame::none().fill(Color32::from_rgb(48, 48, 48)))
+                .show(ctx, |ui| {
+                    // TODO: Handle 2-band or 1-band scenario
+
+                    let rect = ui.max_rect();
+
+                    // subtract 2 pixels (1px per divider line)
+                    let band_height = (rect.height() - 2.0) / 3.0;
+                    ui.label(format!("band_height: {:?}", band_height));
+                });
+
+            // left-side analyser (variable size)
+            egui::CentralPanel::default().show(ctx, |ui| {
                 // TODO: Add a proper custom widget instead of reusing a progress bar
                 let peak_meter =
                     util::gain_to_db(peak_meter.load(std::sync::atomic::Ordering::Relaxed));
