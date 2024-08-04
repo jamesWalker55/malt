@@ -187,8 +187,10 @@ impl<'a, P: Param> ArcKnob<'a, P> {
             fill_color: Color32::from_rgb(70, 48, 48),
             hover_text: true,
             hover_text_content: "Gain reduction".into(),
-            arc_start: 0.625,
-            arc_end: -0.75,
+            // negative length to rotate clockwise
+            // https://www.desmos.com/calculator/cctb9rqruw
+            arc_start: -3.0 / 8.0 * TAU,
+            arc_end: -9.0 / 8.0 * TAU,
         }
     }
 }
@@ -210,12 +212,12 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
                 let outline_stroke = Stroke::new(1.0, self.fill_color.linear_multiply(0.7));
                 let outline_shape = Shape::Path(PathShape {
                     points: get_arc_points(
+                        1.0,
                         self.arc_start,
                         self.arc_end,
                         center,
                         self.size * 0.431,
-                        1.0,
-                        0.03,
+                        0.2,
                     ),
                     closed: false,
                     fill: self.fill_color.linear_multiply(0.7),
@@ -230,12 +232,12 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
                 let arc_stroke = Stroke::new(self.line_width, self.line_color);
                 let shape = Shape::Path(PathShape {
                     points: get_arc_points(
+                        value,
                         self.arc_start,
                         self.arc_end,
                         center,
                         arc_radius,
-                        value,
-                        0.03,
+                        0.2,
                     ),
                     closed: false,
                     fill: Color32::TRANSPARENT,
@@ -313,48 +315,60 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
     }
 }
 
-fn get_end_point(start: f32, end: f32, center: Pos2, radius: f32, value: f32) -> Pos2 {
-    let start_turns: f32 = start;
-    let arc_length = lerp(0.0, end, value);
-    let end_turns = start_turns + arc_length;
+fn get_end_point(start: f32, mut end: f32, center: Pos2, radius: f32, value: f32) -> Pos2 {
+    end = lerp(start, end, value);
 
-    let angle = end_turns * TAU;
+    let angle = end;
     let x = center.x + radius * angle.cos();
     let y = center.y + -radius * angle.sin();
     pos2(x, y)
 }
 
-fn get_pointer_points(start: f32, end: f32, center: Pos2, radius: f32, value: f32) -> Vec<Pos2> {
-    let start_turns: f32 = start;
-    let arc_length = lerp(0.0, end, value);
-    let end_turns = start_turns + arc_length;
-
-    let angle = end_turns * TAU;
-    let x = center.x + radius * angle.cos();
-    let y = center.y + -radius * angle.sin();
-    let short_x = center.x + (radius * 0.04) * angle.cos();
-    let short_y = center.y + (-radius * 0.04) * angle.sin();
-    vec![pos2(short_x, short_y), pos2(x, y)]
-}
-
-fn get_arc_points(
+fn get_pointer_points(
     start: f32,
-    end: f32,
+    mut end: f32,
     center: Pos2,
     radius: f32,
     value: f32,
+) -> Vec<Pos2> {
+    end = lerp(start, end, value);
+
+    let angle = end;
+    let x = center.x + radius * angle.cos();
+    let y = center.y + radius * -angle.sin();
+    let short_x = center.x + radius * angle.cos() * 0.04;
+    let short_y = center.y + radius * -angle.sin() * 0.04;
+    vec![pos2(short_x, short_y), pos2(x, y)]
+}
+
+/// Return a bunch of points that lie on an arc.
+///
+/// Radian measurements start from the right and lie on the x-axis, see this
+/// visualizer: https://www.desmos.com/calculator/cctb9rqruw
+///
+/// * `value` - A scalar between 0.0 and 1.0 to interpolate between `start` and `end`
+/// * `start` - Starting angle in radians
+/// * `end` - Ending angle in radians
+/// * `center` - Center point of the circle which the arc is based on
+/// * `radius` - radius
+/// * `max_arc_distance` - How precise the curve should be, measured in radians
+fn get_arc_points(
+    value: f32,
+    start: f32,
+    mut end: f32,
+    center: Pos2,
+    radius: f32,
     max_arc_distance: f32,
 ) -> Vec<Pos2> {
-    let start_turns: f32 = start;
-    let arc_length = lerp(0.0, end, value);
-    let end_turns = start_turns + arc_length;
+    end = lerp(start, end, value);
+    let length = (end - start).abs();
 
-    let points = (arc_length.abs() / max_arc_distance).ceil() as usize;
-    let points = points.max(1);
+    let points = (length / max_arc_distance).ceil() as usize;
+    let points = points.max(2);
     (0..=points)
         .map(|i| {
             let t = i as f32 / (points - 1) as f32;
-            let angle = lerp(start_turns * TAU, end_turns * TAU, t);
+            let angle = lerp(start, end, t);
             let x = radius * angle.cos();
             let y = -radius * angle.sin();
             pos2(x, y) + center.to_vec2()
