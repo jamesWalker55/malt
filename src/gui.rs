@@ -1,4 +1,7 @@
-use crate::SaiSampler;
+use crate::{
+    widgets::{ArcKnob, KnobLayout, KnobStyle},
+    SaiSampler,
+};
 use nih_plug::prelude::*;
 use nih_plug_egui::{
     create_egui_editor,
@@ -153,6 +156,19 @@ pub(crate) fn create_gui(
                     // subtract 2 pixels (1px per divider line)
                     let band_height = (rect.height() - 2.0) / 3.0;
                     ui.label(format!("band_height: {:?}", band_height));
+
+                    let audio_module_3_knob = ArcKnob::for_param(
+                        &params.gain_reduction,
+                        setter,
+                        28.0,
+                        KnobLayout::Vertical,
+                    )
+                    .preset_style(KnobStyle::Preset1)
+                    .set_fill_color(Color32::from_rgb(70, 48, 48))
+                    .set_line_color(Color32::from_rgb(48, 200, 48))
+                    .set_text_size(11.0)
+                    .set_hover_text("Gain reduction".into());
+                    ui.add(audio_module_3_knob);
                 });
 
             // left-side analyser (variable size)
