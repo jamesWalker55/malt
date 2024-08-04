@@ -6,11 +6,10 @@ use nih_plug::prelude::{Param, ParamSetter};
 use nih_plug_egui::egui::{
     self,
     epaint::{CircleShape, PathShape},
-    pos2, Align2, Color32, FontId, Pos2, Rect, Response, Rgba, Rounding, Sense, Shape, Stroke, Ui,
-    Vec2, Widget,
+    pos2, Align2, Color32, FontId, Pos2, Rect, Response, Rounding, Sense, Shape, Stroke, Ui, Vec2,
+    Widget,
 };
 use once_cell::sync::Lazy;
-use std::{collections::HashMap, sync::Mutex};
 use std::{
     f32::consts::TAU,
     ops::{Add, Mul, Sub},
@@ -24,7 +23,6 @@ const NORMAL_DRAG_MULTIPLIER: f32 = 0.005;
 static DRAG_NORMALIZED_START_VALUE_MEMORY_ID: Lazy<egui::Id> =
     Lazy::new(|| egui::Id::new((file!(), 0)));
 static DRAG_AMOUNT_MEMORY_ID: Lazy<egui::Id> = Lazy::new(|| egui::Id::new((file!(), 1)));
-static VALUE_ENTRY_MEMORY_ID: Lazy<egui::Id> = Lazy::new(|| egui::Id::new((file!(), 2)));
 
 struct SliderRegion<'a, P: Param> {
     param: &'a P,
@@ -174,12 +172,10 @@ pub(crate) struct ArcKnob<'a, P: Param> {
     hover_text: bool,
     hover_text_content: String,
     label_text: String,
-    show_center_value: bool,
     text_size: f32,
     outline: bool,
     padding: f32,
     show_label: bool,
-    swap_label_and_value: bool,
     text_color_override: Color32,
     readable_box: bool,
     arc_start: f32,
@@ -200,11 +196,9 @@ impl<'a, P: Param> ArcKnob<'a, P> {
             hover_text_content: String::new(),
             text_size: 16.0,
             label_text: String::new(),
-            show_center_value: true,
             outline: false,
             padding: 10.0,
             show_label: true,
-            swap_label_and_value: true,
             text_color_override: Color32::PLACEHOLDER,
             readable_box: false,
             arc_start: 0.625,
@@ -212,45 +206,9 @@ impl<'a, P: Param> ArcKnob<'a, P> {
         }
     }
 
-    // Set readability box visibility for text on other colors
-    pub(crate) fn set_readable_box(mut self, show_box: bool) -> Self {
-        self.readable_box = show_box;
-        self
-    }
-
-    // Change the text color if you want it separate from line color
-    pub(crate) fn override_text_color(mut self, text_color: Color32) -> Self {
-        self.text_color_override = text_color;
-        self
-    }
-
-    // Undo newer swap label and value
-    pub(crate) fn set_swap_label_and_value(mut self, use_old: bool) -> Self {
-        self.swap_label_and_value = use_old;
-        self
-    }
-
-    // Specify outline drawing
-    pub(crate) fn use_outline(mut self, new_bool: bool) -> Self {
-        self.outline = new_bool;
-        self
-    }
-
-    // Specify showing value when mouse-over
-    pub(crate) fn use_hover_text(mut self, new_bool: bool) -> Self {
-        self.hover_text = new_bool;
-        self
-    }
-
     // Specify value when mouse-over
     pub(crate) fn set_hover_text(mut self, new_text: String) -> Self {
         self.hover_text_content = new_text;
-        self
-    }
-
-    // Specify knob label
-    pub(crate) fn set_label(mut self, new_label: String) -> Self {
-        self.label_text = new_label;
         self
     }
 
@@ -266,45 +224,9 @@ impl<'a, P: Param> ArcKnob<'a, P> {
         self
     }
 
-    // Specify center knob size
-    pub(crate) fn set_center_size(mut self, size: f32) -> Self {
-        self.center_size = size;
-        self
-    }
-
-    // Specify line width
-    pub(crate) fn set_line_width(mut self, width: f32) -> Self {
-        self.line_width = width;
-        self
-    }
-
-    // Specify distance between center and arc
-    pub(crate) fn set_center_to_line_space(mut self, new_width: f32) -> Self {
-        self.center_to_line_space = new_width;
-        self
-    }
-
     // Set text size for label
     pub(crate) fn set_text_size(mut self, text_size: f32) -> Self {
         self.text_size = text_size;
-        self
-    }
-
-    // Set knob padding
-    pub(crate) fn set_padding(mut self, padding: f32) -> Self {
-        self.padding = padding;
-        self
-    }
-
-    // Set center value of knob visibility
-    pub(crate) fn set_show_center_value(mut self, new_bool: bool) -> Self {
-        self.show_center_value = new_bool;
-        self
-    }
-
-    // Set center value of knob visibility
-    pub(crate) fn set_show_label(mut self, new_bool: bool) -> Self {
-        self.show_label = new_bool;
         self
     }
 
@@ -837,36 +759,4 @@ where
     T: Add<T, Output = T> + Sub<T, Output = T> + Mul<f32, Output = T> + Copy,
 {
     (end - start) * t.clamp(0.0, 1.0) + start
-}
-
-pub(crate) struct TextSlider<'a, P: Param> {
-    slider_region: SliderRegion<'a, P>,
-    location: Rect,
-}
-
-impl<'a, P: Param> TextSlider<'a, P> {
-    pub(crate) fn for_param(param: &'a P, param_setter: &'a ParamSetter, location: Rect) -> Self {
-        TextSlider {
-            slider_region: SliderRegion::new(param, param_setter),
-            location,
-        }
-    }
-}
-
-impl<'a, P: Param> Widget for TextSlider<'a, P> {
-    fn ui(self, ui: &mut Ui) -> Response {
-        let mut response = ui.allocate_rect(self.location, Sense::click_and_drag());
-        self.slider_region.handle_response(&ui, &mut response);
-
-        let painter = ui.painter_at(self.location);
-        let center = self.location.center();
-
-        // Draw the text
-        let text = self.slider_region.get_string();
-        let anchor = Align2::CENTER_CENTER;
-        let color = Color32::from(Rgba::WHITE);
-        let font = FontId::monospace(16.0);
-        painter.text(center, anchor, text, font, color);
-        response
-    }
 }
