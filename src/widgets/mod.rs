@@ -163,7 +163,7 @@ impl<'a, P: Param> SliderRegion<'a, P> {
     }
 }
 
-pub struct ArcKnob<'a, P: Param> {
+pub(crate) struct ArcKnob<'a, P: Param> {
     slider_region: SliderRegion<'a, P>,
     radius: f32,
     line_color: Color32,
@@ -182,35 +182,12 @@ pub struct ArcKnob<'a, P: Param> {
     swap_label_and_value: bool,
     text_color_override: Color32,
     readable_box: bool,
-    layout: KnobLayout,
     arc_start: f32,
     arc_end: f32,
 }
 
-#[allow(dead_code)]
-pub enum KnobStyle {
-    Preset1,
-    Preset2,
-}
-
-#[allow(dead_code)]
-#[derive(Copy, Clone, PartialEq)]
-pub enum KnobLayout {
-    Vertical,
-    Horizonal,
-    HorizontalInline,
-    SquareNoLabel,
-    Default,
-}
-
-#[allow(dead_code)]
 impl<'a, P: Param> ArcKnob<'a, P> {
-    pub fn for_param(
-        param: &'a P,
-        param_setter: &'a ParamSetter,
-        radius: f32,
-        layout: KnobLayout,
-    ) -> Self {
+    pub(crate) fn for_param(param: &'a P, param_setter: &'a ParamSetter, radius: f32) -> Self {
         ArcKnob {
             slider_region: SliderRegion::new(param, param_setter),
             radius: radius,
@@ -230,138 +207,115 @@ impl<'a, P: Param> ArcKnob<'a, P> {
             swap_label_and_value: true,
             text_color_override: Color32::PLACEHOLDER,
             readable_box: false,
-            layout: layout,
-            arc_start: match layout {
-                KnobLayout::Default => 0.75,
-                KnobLayout::SquareNoLabel => 0.625,
-                KnobLayout::Vertical => 0.625,
-                KnobLayout::Horizonal => 0.625,
-                KnobLayout::HorizontalInline => 0.625,
-            },
-            arc_end: match layout {
-                KnobLayout::Default => -1.0,
-                KnobLayout::SquareNoLabel => -0.75,
-                KnobLayout::Vertical => -0.75,
-                KnobLayout::Horizonal => -0.75,
-                KnobLayout::HorizontalInline => -0.75,
-            },
+            arc_start: 0.625,
+            arc_end: -0.75,
         }
     }
 
     // Set readability box visibility for text on other colors
-    pub fn set_readable_box(mut self, show_box: bool) -> Self {
+    pub(crate) fn set_readable_box(mut self, show_box: bool) -> Self {
         self.readable_box = show_box;
         self
     }
 
     // Change the text color if you want it separate from line color
-    pub fn override_text_color(mut self, text_color: Color32) -> Self {
+    pub(crate) fn override_text_color(mut self, text_color: Color32) -> Self {
         self.text_color_override = text_color;
         self
     }
 
     // Undo newer swap label and value
-    pub fn set_swap_label_and_value(mut self, use_old: bool) -> Self {
+    pub(crate) fn set_swap_label_and_value(mut self, use_old: bool) -> Self {
         self.swap_label_and_value = use_old;
         self
     }
 
     // Specify outline drawing
-    pub fn use_outline(mut self, new_bool: bool) -> Self {
+    pub(crate) fn use_outline(mut self, new_bool: bool) -> Self {
         self.outline = new_bool;
         self
     }
 
     // Specify showing value when mouse-over
-    pub fn use_hover_text(mut self, new_bool: bool) -> Self {
+    pub(crate) fn use_hover_text(mut self, new_bool: bool) -> Self {
         self.hover_text = new_bool;
         self
     }
 
     // Specify value when mouse-over
-    pub fn set_hover_text(mut self, new_text: String) -> Self {
+    pub(crate) fn set_hover_text(mut self, new_text: String) -> Self {
         self.hover_text_content = new_text;
         self
     }
 
     // Specify knob label
-    pub fn set_label(mut self, new_label: String) -> Self {
+    pub(crate) fn set_label(mut self, new_label: String) -> Self {
         self.label_text = new_label;
         self
     }
 
     // Specify line color for knob outside
-    pub fn set_line_color(mut self, new_color: Color32) -> Self {
+    pub(crate) fn set_line_color(mut self, new_color: Color32) -> Self {
         self.line_color = new_color;
         self
     }
 
     // Specify fill color for knob
-    pub fn set_fill_color(mut self, new_color: Color32) -> Self {
+    pub(crate) fn set_fill_color(mut self, new_color: Color32) -> Self {
         self.fill_color = new_color;
         self
     }
 
     // Specify center knob size
-    pub fn set_center_size(mut self, size: f32) -> Self {
+    pub(crate) fn set_center_size(mut self, size: f32) -> Self {
         self.center_size = size;
         self
     }
 
     // Specify line width
-    pub fn set_line_width(mut self, width: f32) -> Self {
+    pub(crate) fn set_line_width(mut self, width: f32) -> Self {
         self.line_width = width;
         self
     }
 
     // Specify distance between center and arc
-    pub fn set_center_to_line_space(mut self, new_width: f32) -> Self {
+    pub(crate) fn set_center_to_line_space(mut self, new_width: f32) -> Self {
         self.center_to_line_space = new_width;
         self
     }
 
     // Set text size for label
-    pub fn set_text_size(mut self, text_size: f32) -> Self {
+    pub(crate) fn set_text_size(mut self, text_size: f32) -> Self {
         self.text_size = text_size;
         self
     }
 
     // Set knob padding
-    pub fn set_padding(mut self, padding: f32) -> Self {
+    pub(crate) fn set_padding(mut self, padding: f32) -> Self {
         self.padding = padding;
         self
     }
 
     // Set center value of knob visibility
-    pub fn set_show_center_value(mut self, new_bool: bool) -> Self {
+    pub(crate) fn set_show_center_value(mut self, new_bool: bool) -> Self {
         self.show_center_value = new_bool;
         self
     }
 
     // Set center value of knob visibility
-    pub fn set_show_label(mut self, new_bool: bool) -> Self {
+    pub(crate) fn set_show_label(mut self, new_bool: bool) -> Self {
         self.show_label = new_bool;
         self
     }
 
-    pub fn preset_style(mut self, style_id: KnobStyle) -> Self {
+    pub(crate) fn preset_style(mut self) -> Self {
         // These are all calculated off radius to scale better
-        match style_id {
-            KnobStyle::Preset1 => {
-                self.center_size = self.radius * 0.7;
-                self.line_width = self.radius * 0.3;
-                self.center_to_line_space = self.radius * 0.012;
-                self.padding = 0.0;
-                self.outline = true;
-                self.hover_text = true;
-            }
-            KnobStyle::Preset2 => {
-                self.center_size = self.radius * 0.5;
-                self.line_width = self.radius * 0.5;
-                self.center_to_line_space = self.radius * 0.0125;
-                self.padding = 0.0;
-            }
-        }
+        self.center_size = self.radius * 0.7;
+        self.line_width = self.radius * 0.3;
+        self.center_to_line_space = self.radius * 0.012;
+        self.padding = 0.0;
+        self.outline = true;
+        self.hover_text = true;
         self
     }
 }
@@ -369,46 +323,17 @@ impl<'a, P: Param> ArcKnob<'a, P> {
 impl<'a, P: Param> Widget for ArcKnob<'a, P> {
     fn ui(mut self, ui: &mut Ui) -> Response {
         // Figure out the size to reserve on screen for widget
-        let desired_size: Vec2 = match self.layout {
-            KnobLayout::Horizonal => egui::vec2(
-                self.padding + self.radius * 4.0,
-                self.padding + self.radius * 2.0,
-            ),
-            KnobLayout::Vertical => egui::vec2(
-                self.padding + self.radius * 2.0,
-                self.padding + self.radius * 3.0,
-            ),
-            KnobLayout::HorizontalInline => egui::vec2(
-                self.padding + self.radius * 9.0,
-                self.padding + self.radius * 2.0,
-            ),
-            KnobLayout::SquareNoLabel => egui::vec2(
-                self.padding + self.radius * 2.0,
-                self.padding + self.radius * 2.0,
-            ),
-            KnobLayout::Default => egui::vec2(
-                self.padding + self.radius * 2.0,
-                self.padding + self.radius * 2.0,
-            ),
-        };
+        let desired_size: Vec2 = egui::vec2(
+            self.padding + self.radius * 2.0,
+            self.padding + self.radius * 3.0,
+        );
 
         let mut response = ui.allocate_response(desired_size, Sense::click_and_drag());
         let value = self.slider_region.handle_response(&ui, &mut response);
 
         ui.vertical(|ui| {
             let painter = ui.painter_at(response.rect);
-            let center = match self.layout {
-                KnobLayout::Default | KnobLayout::SquareNoLabel => response.rect.center(),
-                KnobLayout::Vertical => response.rect.center(),
-                KnobLayout::Horizonal => Pos2 {
-                    x: response.rect.left_center().x + self.radius,
-                    y: response.rect.left_center().y,
-                },
-                KnobLayout::HorizontalInline => Pos2 {
-                    x: response.rect.left_center().x + self.radius,
-                    y: response.rect.left_center().y,
-                },
-            };
+            let center = response.rect.center();
 
             // Background Rect
             ui.painter().rect_filled(
@@ -751,66 +676,14 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
                 self.padding * 2.0
             };
             if self.show_label {
-                let value_pos: Pos2;
-                let label_pos: Pos2;
-                match self.layout {
-                    KnobLayout::SquareNoLabel => {
-                        // This isn't indended to be a possibility but it has to be here since
-                        // it's in the enum. Hence these making no sense
-                        value_pos = response.rect.center();
-                        label_pos = response.rect.center();
-                    }
-                    KnobLayout::Default => {
-                        if self.swap_label_and_value {
-                            // Newer rearranged positions to put value at bottom of knob
-                            value_pos = Pos2::new(
-                                response.rect.center_bottom().x,
-                                response.rect.center_bottom().y - label_y,
-                            );
-                            label_pos =
-                                Pos2::new(response.rect.center().x, response.rect.center().y);
-                        } else {
-                            // The old value and label positions
-                            label_pos = Pos2::new(
-                                response.rect.center_bottom().x,
-                                response.rect.center_bottom().y - label_y,
-                            );
-                            value_pos =
-                                Pos2::new(response.rect.center().x, response.rect.center().y);
-                        }
-                    }
-                    // GUI Rewrite for Actuate made these
-                    KnobLayout::Vertical => {
-                        label_pos = Pos2::new(
-                            response.rect.center_top().x,
-                            response.rect.center_top().y + label_y * 1.5,
-                        );
-                        value_pos = Pos2::new(
-                            response.rect.center_bottom().x,
-                            response.rect.center_bottom().y - label_y * 1.5,
-                        );
-                    }
-                    KnobLayout::Horizonal => {
-                        label_pos = Pos2::new(
-                            response.rect.center().x + self.radius / 1.5,
-                            response.rect.right_center().y - label_y,
-                        );
-                        value_pos = Pos2::new(
-                            response.rect.center().x + self.radius / 1.5,
-                            response.rect.right_center().y + label_y,
-                        );
-                    }
-                    KnobLayout::HorizontalInline => {
-                        label_pos = Pos2::new(
-                            response.rect.center().x + self.radius / 1.5,
-                            response.rect.right_center().y,
-                        );
-                        value_pos = Pos2::new(
-                            response.rect.center().x + self.radius / 1.5,
-                            response.rect.right_center().y,
-                        );
-                    }
-                }
+                let label_pos = Pos2::new(
+                    response.rect.center_top().x,
+                    response.rect.center_top().y + label_y * 1.5,
+                );
+                let value_pos = Pos2::new(
+                    response.rect.center_bottom().x,
+                    response.rect.center_bottom().y - label_y * 1.5,
+                );
 
                 if self.readable_box {
                     // Background for text readability
@@ -837,101 +710,63 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
                 }
 
                 if self.label_text.is_empty() {
-                    if self.layout == KnobLayout::HorizontalInline {
-                        painter.text(
-                            label_pos,
-                            Align2::CENTER_CENTER,
-                            self.slider_region.param.name().to_owned()
-                                + ": "
-                                + &self.slider_region.get_string(),
-                            FontId::proportional(self.text_size),
-                            Color32::BLACK.linear_multiply(0.2),
-                        );
-                        painter.text(
-                            label_pos,
-                            Align2::CENTER_CENTER,
-                            self.slider_region.param.name().to_owned()
-                                + ": "
-                                + &self.slider_region.get_string(),
-                            FontId::proportional(self.text_size),
-                            text_color.linear_multiply(0.4),
-                        );
-                    } else {
-                        painter.text(
-                            value_pos,
-                            Align2::CENTER_CENTER,
-                            self.slider_region.get_string(),
-                            FontId::proportional(self.text_size),
-                            Color32::WHITE.linear_multiply(0.1),
-                        );
-                        painter.text(
-                            value_pos,
-                            Align2::CENTER_CENTER,
-                            self.slider_region.get_string(),
-                            FontId::proportional(self.text_size),
-                            text_color,
-                        );
-                        painter.text(
-                            label_pos,
-                            Align2::CENTER_CENTER,
-                            self.slider_region.param.name(),
-                            FontId::proportional(self.text_size),
-                            Color32::BLACK.linear_multiply(0.2),
-                        );
-                        painter.text(
-                            label_pos,
-                            Align2::CENTER_CENTER,
-                            self.slider_region.param.name(),
-                            FontId::proportional(self.text_size),
-                            text_color.linear_multiply(0.4),
-                        );
-                    }
+                    painter.text(
+                        value_pos,
+                        Align2::CENTER_CENTER,
+                        self.slider_region.get_string(),
+                        FontId::proportional(self.text_size),
+                        Color32::WHITE.linear_multiply(0.1),
+                    );
+                    painter.text(
+                        value_pos,
+                        Align2::CENTER_CENTER,
+                        self.slider_region.get_string(),
+                        FontId::proportional(self.text_size),
+                        text_color,
+                    );
+                    painter.text(
+                        label_pos,
+                        Align2::CENTER_CENTER,
+                        self.slider_region.param.name(),
+                        FontId::proportional(self.text_size),
+                        Color32::BLACK.linear_multiply(0.2),
+                    );
+                    painter.text(
+                        label_pos,
+                        Align2::CENTER_CENTER,
+                        self.slider_region.param.name(),
+                        FontId::proportional(self.text_size),
+                        text_color.linear_multiply(0.4),
+                    );
                 } else {
-                    if self.layout == KnobLayout::HorizontalInline {
-                        painter.text(
-                            label_pos,
-                            Align2::CENTER_CENTER,
-                            self.label_text.to_string() + ": " + &self.slider_region.param.name(),
-                            FontId::proportional(self.text_size),
-                            Color32::BLACK.linear_multiply(0.2),
-                        );
-                        painter.text(
-                            label_pos,
-                            Align2::CENTER_CENTER,
-                            self.label_text.to_string() + ": " + &self.slider_region.param.name(),
-                            FontId::proportional(self.text_size),
-                            text_color.linear_multiply(0.4),
-                        );
-                    } else {
-                        painter.text(
-                            value_pos,
-                            Align2::CENTER_CENTER,
-                            self.label_text.to_string(),
-                            FontId::proportional(self.text_size),
-                            Color32::WHITE.linear_multiply(0.1),
-                        );
-                        painter.text(
-                            value_pos,
-                            Align2::CENTER_CENTER,
-                            self.label_text,
-                            FontId::proportional(self.text_size),
-                            text_color,
-                        );
-                        painter.text(
-                            label_pos,
-                            Align2::CENTER_CENTER,
-                            self.slider_region.param.name(),
-                            FontId::proportional(self.text_size),
-                            Color32::BLACK.linear_multiply(0.2),
-                        );
-                        painter.text(
-                            label_pos,
-                            Align2::CENTER_CENTER,
-                            self.slider_region.param.name(),
-                            FontId::proportional(self.text_size),
-                            text_color.linear_multiply(0.4),
-                        );
-                    }
+                    painter.text(
+                        value_pos,
+                        Align2::CENTER_CENTER,
+                        self.label_text.to_string(),
+                        FontId::proportional(self.text_size),
+                        Color32::WHITE.linear_multiply(0.1),
+                    );
+                    painter.text(
+                        value_pos,
+                        Align2::CENTER_CENTER,
+                        self.label_text,
+                        FontId::proportional(self.text_size),
+                        text_color,
+                    );
+                    painter.text(
+                        label_pos,
+                        Align2::CENTER_CENTER,
+                        self.slider_region.param.name(),
+                        FontId::proportional(self.text_size),
+                        Color32::BLACK.linear_multiply(0.2),
+                    );
+                    painter.text(
+                        label_pos,
+                        Align2::CENTER_CENTER,
+                        self.slider_region.param.name(),
+                        FontId::proportional(self.text_size),
+                        text_color.linear_multiply(0.4),
+                    );
                 }
             }
         });
@@ -997,21 +832,20 @@ fn get_arc_points(
 }
 
 // Moved lerp to this file to reduce dependencies - Ardura
-pub fn lerp<T>(start: T, end: T, t: f32) -> T
+pub(crate) fn lerp<T>(start: T, end: T, t: f32) -> T
 where
     T: Add<T, Output = T> + Sub<T, Output = T> + Mul<f32, Output = T> + Copy,
 {
     (end - start) * t.clamp(0.0, 1.0) + start
 }
 
-pub struct TextSlider<'a, P: Param> {
+pub(crate) struct TextSlider<'a, P: Param> {
     slider_region: SliderRegion<'a, P>,
     location: Rect,
 }
 
-#[allow(dead_code)]
 impl<'a, P: Param> TextSlider<'a, P> {
-    pub fn for_param(param: &'a P, param_setter: &'a ParamSetter, location: Rect) -> Self {
+    pub(crate) fn for_param(param: &'a P, param_setter: &'a ParamSetter, location: Rect) -> Self {
         TextSlider {
             slider_region: SliderRegion::new(param, param_setter),
             location,
