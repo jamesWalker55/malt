@@ -169,8 +169,8 @@ pub(crate) fn create_gui(
                     ui.add(ArcKnob::for_param(
                         &params.gain_reduction,
                         setter,
-                        140.0 / 2.0 / 4.0,
-                        Pos2::new(1029.0 / 4.0, 990.0 / 4.0),
+                        24.0,
+                        Pos2::new(338.0, 113.0),
                     ));
                 });
 

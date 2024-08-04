@@ -38,21 +38,22 @@ impl<'a, P: Param> SliderRegion<'a, P> {
         let value = self.param.unmodulated_normalized_value();
         if response.drag_started() {
             self.param_setter.begin_set_parameter(self.param);
-            ui.memory().data.insert_temp(*DRAG_AMOUNT_MEMORY_ID, value)
+            ui.memory_mut(|m| m.data.insert_temp(*DRAG_AMOUNT_MEMORY_ID, value));
         }
 
         if response.dragged() {
             // Invert the y axis, since we want dragging up to increase the value and down to
             // decrease it, but drag_delta() has the y-axis increasing downwards.
             let delta = -response.drag_delta().y;
-            let mut memory = ui.memory();
-            let value = memory.data.get_temp_mut_or(*DRAG_AMOUNT_MEMORY_ID, value);
-            *value = (*value + delta / 100.0).clamp(0.0, 1.0);
-            self.param_setter
-                .set_parameter_normalized(self.param, *value);
+            ui.memory_mut(|memory| {
+                let value = memory.data.get_temp_mut_or(*DRAG_AMOUNT_MEMORY_ID, value);
+                *value = (*value + delta / 100.0).clamp(0.0, 1.0);
+                self.param_setter
+                    .set_parameter_normalized(self.param, *value);
+            });
         }
 
-        if response.drag_released() {
+        if response.drag_stopped() {
             self.param_setter.end_set_parameter(self.param);
         }
         value
