@@ -1,10 +1,14 @@
 use crate::SaiSampler;
 use nih_plug::prelude::*;
-use nih_plug_egui::{create_egui_editor, egui, widgets};
+use nih_plug_egui::{
+    create_egui_editor,
+    egui::{self, Color32, TextStyle},
+    widgets,
+};
 
 // the DPI-independent size of the window
-pub(crate) const GUI_WIDTH: u32 = 700;
-pub(crate) const GUI_HEIGHT: u32 = 700;
+pub(crate) const GUI_WIDTH: u32 = 651;
+pub(crate) const GUI_HEIGHT: u32 = 391;
 
 pub(crate) fn create_gui(
     plugin: &mut SaiSampler,
@@ -15,9 +19,122 @@ pub(crate) fn create_gui(
     create_egui_editor(
         plugin.editor_state.clone(),
         (),
-        |_, _| {},
-        move |egui_ctx, setter, _state| {
-            egui::CentralPanel::default().show(egui_ctx, |ui| {
+        |ctx, _| {
+            // Load new fonts
+            {
+                use egui::{FontData, FontDefinitions, FontFamily};
+
+                let mut fonts = FontDefinitions::empty();
+
+                // Load font data
+                fonts.font_data.insert(
+                    "Inter".into(),
+                    FontData::from_static(include_bytes!("../fonts/Inter-Regular.ttf")),
+                );
+
+                // Define font priority
+                fonts
+                    .families
+                    .get_mut(&FontFamily::Proportional)
+                    .unwrap()
+                    .push("Inter".into());
+
+                ctx.set_fonts(fonts)
+            }
+
+            // Override GUI styling
+            {
+                use egui::FontFamily::Proportional;
+                use egui::FontId;
+                use egui::Style;
+                use egui::TextStyle;
+                use egui::Visuals;
+
+                let mut style = (*ctx.style()).clone();
+
+                // font sizes
+                style.text_styles = [
+                    (TextStyle::Heading, FontId::new(16.0, Proportional)),
+                    (TextStyle::Body, FontId::new(11.0, Proportional)),
+                    (TextStyle::Small, FontId::new(10.0, Proportional)),
+                    (TextStyle::Button, FontId::new(12.0, Proportional)),
+                ]
+                .into();
+
+                // color styling
+                // style.visuals.panel_fill = Color32::from_rgb(255, 0, 0);
+                style.visuals.panel_fill = Color32::from_hex("#303030").unwrap();
+                // style.wid
+
+                ctx.set_style(style);
+            }
+        },
+        move |ctx, setter, _state| {
+            let header_frame = egui::Frame::none().fill(egui::Color32::from_rgb(17, 17, 17));
+            const HEADER_HEIGHT: f32 = 25.0;
+
+            // Header
+            egui::TopBottomPanel::top("header_panel")
+                .show_separator_line(false)
+                .exact_height(HEADER_HEIGHT)
+                .frame(header_frame.clone())
+                .show(ctx, |ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // Right side
+                        ui.allocate_ui_with_layout(
+                            egui::Vec2::new(0.0, HEADER_HEIGHT),
+                            egui::Layout::right_to_left(egui::Align::Center),
+                            |ui| {
+                                ui.label("?");
+                                ui.label("right side:");
+                            },
+                        );
+                        // Left side
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            {
+                                let style = ui.style_mut();
+                                style.override_text_style = Some(TextStyle::Heading);
+
+                                ui.label("sai audio Malt");
+
+                                ui.reset_style();
+                            }
+                            ui.label("This is the header again!");
+                        });
+                    })
+                });
+
+            // Footer
+            egui::TopBottomPanel::bottom("footer_panel")
+                .show_separator_line(false)
+                .exact_height(HEADER_HEIGHT)
+                .frame(header_frame.clone())
+                .show(ctx, |ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // Right side
+                        ui.allocate_ui_with_layout(
+                            egui::Vec2::new(0.0, HEADER_HEIGHT),
+                            egui::Layout::right_to_left(egui::Align::Center),
+                            |ui| {
+                                ui.label("///");
+                            },
+                        );
+                        // Left side
+                        ui.with_layout(
+                            egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
+                            |ui| {
+                                ui.columns(5, |cols| {
+                                    cols[0].centered_and_justified(|ui| ui.label("Trigger: MIDI"));
+                                    cols[1].centered_and_justified(|ui| ui.label("Lookahead: 10ms"));
+                                    cols[2].centered_and_justified(|ui| ui.label("Smooth: On"));
+                                    cols[3].centered_and_justified(|ui| ui.label("Bypass"));
+                                    cols[4].centered_and_justified(|ui| ui.label("Mix: 100%"));
+                                })
+                            },
+                        );
+                    })
+                });
+            egui::CentralPanel::default().show(ctx, |ui| {
                 // NOTE: See `plugins/diopser/src/editor.rs` for an example using the generic UI widget
 
                 // TODO: Add a proper custom widget instead of reusing a progress bar
@@ -47,22 +164,22 @@ pub(crate) fn create_gui(
                 ui.add(widgets::ParamSlider::for_param(&params.precomp, setter));
                 ui.label("release");
                 ui.add(widgets::ParamSlider::for_param(&params.release, setter));
-                ui.label("low_crossover");
-                ui.add(widgets::ParamSlider::for_param(
-                    &params.low_crossover,
-                    setter,
-                ));
-                ui.label("high_crossover");
-                ui.add(widgets::ParamSlider::for_param(
-                    &params.high_crossover,
-                    setter,
-                ));
-                ui.label("low_gain");
-                ui.add(widgets::ParamSlider::for_param(&params.low_gain, setter));
-                ui.label("mid_gain");
-                ui.add(widgets::ParamSlider::for_param(&params.mid_gain, setter));
-                ui.label("high_gain");
-                ui.add(widgets::ParamSlider::for_param(&params.high_gain, setter));
+                // ui.label("low_crossover");
+                // ui.add(widgets::ParamSlider::for_param(
+                //     &params.low_crossover,
+                //     setter,
+                // ));
+                // ui.label("high_crossover");
+                // ui.add(widgets::ParamSlider::for_param(
+                //     &params.high_crossover,
+                //     setter,
+                // ));
+                // ui.label("low_gain");
+                // ui.add(widgets::ParamSlider::for_param(&params.low_gain, setter));
+                // ui.label("mid_gain");
+                // ui.add(widgets::ParamSlider::for_param(&params.mid_gain, setter));
+                // ui.label("high_gain");
+                // ui.add(widgets::ParamSlider::for_param(&params.high_gain, setter));
 
                 // ui.label(
                 //     "Also gain, but with a lame widget. Can't even render the value correctly!",
