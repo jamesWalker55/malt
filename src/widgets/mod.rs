@@ -165,32 +165,30 @@ pub(crate) struct ArcKnob<'a, P: Param> {
     line_width: f32,
     slider_region: SliderRegion<'a, P>,
     highlight_color: Color32,
-    line_color: Color32,
-    bg_color: Color32,
-    knob_color: Color32,
-    arc_start: f32,
-    arc_end: f32,
 }
 
 impl<'a, P: Param> ArcKnob<'a, P> {
+    // negative length to rotate clockwise
+    // https://www.desmos.com/calculator/cctb9rqruw
+    const ARC_START: f32 = -3.0 / 8.0 * TAU;
+    const ARC_END: f32 = -9.0 / 8.0 * TAU;
+
+    const LINE_COLOR: Color32 = Color32::from_rgb(245, 245, 245);
+    const BG_COLOR: Color32 = Color32::from_rgb(64, 64, 64);
+    const KNOB_COLOR: Color32 = Color32::from_rgb(33, 33, 33);
+
     pub(crate) fn for_param(
         param: &'a P,
         param_setter: &'a ParamSetter,
         size: f32,
+        highlight_color: Color32,
         line_width: f32,
     ) -> Self {
         ArcKnob {
             size,
             line_width,
             slider_region: SliderRegion::new(param, param_setter),
-            highlight_color: Color32::from_rgb(255, 245, 157),
-            line_color: Color32::from_rgb(245, 245, 245),
-            bg_color: Color32::from_rgb(64, 64, 64),
-            knob_color: Color32::from_rgb(33, 33, 33),
-            // negative length to rotate clockwise
-            // https://www.desmos.com/calculator/cctb9rqruw
-            arc_start: -3.0 / 8.0 * TAU,
-            arc_end: -9.0 / 8.0 * TAU,
+            highlight_color,
         }
     }
 }
@@ -218,15 +216,15 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
                 let shape = Shape::Path(PathShape {
                     points: get_arc_points(
                         1.0,
-                        self.arc_start,
-                        self.arc_end,
+                        Self::ARC_START,
+                        Self::ARC_END,
                         center,
                         outline_radius,
                         0.2,
                     ),
                     closed: false,
                     fill: Color32::TRANSPARENT,
-                    stroke: Stroke::new(self.line_width, self.bg_color),
+                    stroke: Stroke::new(self.line_width, Self::BG_COLOR),
                 });
                 painter.add(shape);
             }
@@ -236,8 +234,8 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
                 let shape = Shape::Path(PathShape {
                     points: get_arc_points(
                         value,
-                        self.arc_start,
-                        self.arc_end,
+                        Self::ARC_START,
+                        Self::ARC_END,
                         center,
                         outline_radius,
                         0.2,
@@ -255,7 +253,7 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
                     center,
                     radius: center_radius,
                     stroke: Stroke::NONE,
-                    fill: self.knob_color,
+                    fill: Self::KNOB_COLOR,
                 });
                 painter.add(shape);
             }
@@ -268,7 +266,7 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
                 let outer_radius = outline_radius - self.line_width;
 
                 // find start and end point
-                let angle = lerp(self.arc_start, self.arc_end, value);
+                let angle = lerp(Self::ARC_START, Self::ARC_END, value);
                 let start_point = {
                     let x = center.x + inner_radius * angle.cos();
                     let y = center.y + inner_radius * -angle.sin();
@@ -283,8 +281,8 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
                 let line_shape = Shape::Path(PathShape {
                     points: vec![start_point, end_point],
                     closed: false,
-                    fill: self.line_color,
-                    stroke: Stroke::new(self.line_width, self.line_color),
+                    fill: Self::LINE_COLOR,
+                    stroke: Stroke::new(self.line_width, Self::LINE_COLOR),
                 });
                 painter.add(line_shape);
 
@@ -294,14 +292,14 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
                     let end_ball = Shape::Circle(CircleShape {
                         center: end_point,
                         radius: ball_radius,
-                        fill: self.line_color,
+                        fill: Self::LINE_COLOR,
                         stroke: Stroke::NONE,
                     });
                     painter.add(end_ball);
                     let center_ball = Shape::Circle(CircleShape {
                         center: start_point,
                         radius: ball_radius,
-                        fill: self.line_color,
+                        fill: Self::LINE_COLOR,
                         stroke: Stroke::NONE,
                     });
                     painter.add(center_ball);
