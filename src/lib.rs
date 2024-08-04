@@ -1,33 +1,37 @@
 mod biquad;
 mod envelope;
-mod filters;
 mod oscillator;
 mod parameter_formatters;
 mod pattern;
+mod splitter;
+mod svf;
 mod voice;
 
-use biquad::Precision;
+use biquad::{
+    ButterworthLP, FirstOrderAP, FirstOrderLP, FixedQFilter, LinkwitzRileyHP, LinkwitzRileyLP,
+};
+use envelope::EaseInOutSine;
+use envelope::EaseInSine;
 use envelope::Envelope;
-use filters::{ButterworthLPF, FirstOrderLPF, LinkwitzRileyHPF, LinkwitzRileyLPF};
 use nih_plug::{buffer::ChannelSamples, prelude::*};
 use nih_plug_egui::{create_egui_editor, egui, widgets, EguiState};
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
+use splitter::DynamicThreeBand24Slope;
+use splitter::MinimumThreeBand24Slope;
 use std::sync::Arc;
 use util::{db_to_gain, gain_to_db};
 
-struct SaiSampler {
+pub struct SaiSampler {
     params: Arc<SaiSamplerParams>,
     sr: f32,
     latency_seconds: f32,
     latency_samples: u32,
-    lpf_l: LinkwitzRileyLPF,
-    lpf_r: LinkwitzRileyLPF,
-    hpf_l: LinkwitzRileyHPF,
-    hpf_r: LinkwitzRileyHPF,
+    splitter_l: DynamicThreeBand24Slope,
+    splitter_r: MinimumThreeBand24Slope,
     buf: AllocRingBuffer<f32>,
-    env: Option<Envelope>,
-    env_filter: FirstOrderLPF,
+    env: Option<Envelope<EaseInSine, EaseInOutSine>>,
+    env_filter: FixedQFilter<FirstOrderLP>,
 
     /// The editor state, saved together with the parameter state so the custom scaling can be
     /// restored.
@@ -49,13 +53,11 @@ impl Default for SaiSampler {
             sr: 0.0,
             latency_seconds: 0.0,
             latency_samples: 0,
-            lpf_l: LinkwitzRileyLPF::new(0.0, 0.0),
-            lpf_r: LinkwitzRileyLPF::new(0.0, 0.0),
-            hpf_l: LinkwitzRileyHPF::new(0.0, 0.0),
-            hpf_r: LinkwitzRileyHPF::new(0.0, 0.0),
+            splitter_l: DynamicThreeBand24Slope::new(0.0, 0.0, 0.0),
+            splitter_r: MinimumThreeBand24Slope::new(0.0, 0.0, 0.0),
             buf: AllocRingBuffer::new(1),
             env: None,
-            env_filter: FirstOrderLPF::new(0.0, 0.0),
+            env_filter: FixedQFilter::new(0.0, 0.0),
             // TEMP
             peak_meter: Arc::new(AtomicF32::new(util::MINUS_INFINITY_DB)),
             editor_state: EguiState::from_size(300, 400),
@@ -75,6 +77,12 @@ struct SaiSamplerParams {
     pub low_crossover: FloatParam,
     #[id = "high_crossover"]
     pub high_crossover: FloatParam,
+    #[id = "low_gain"]
+    pub low_gain: FloatParam,
+    #[id = "mid_gain"]
+    pub mid_gain: FloatParam,
+    #[id = "high_gain"]
+    pub high_gain: FloatParam,
 }
 
 impl Default for SaiSamplerParams {
@@ -136,6 +144,42 @@ impl Default for SaiSamplerParams {
             )
             .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
             .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
+            low_gain: FloatParam::new(
+                "Low gain",
+                db_to_gain(0.0),
+                FloatRange::Skewed {
+                    min: 0.0,
+                    max: 1.0,
+                    factor: FloatRange::skew_factor(-1.2),
+                },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            mid_gain: FloatParam::new(
+                "Mid gain",
+                db_to_gain(0.0),
+                FloatRange::Skewed {
+                    min: 0.0,
+                    max: 1.0,
+                    factor: FloatRange::skew_factor(-1.2),
+                },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            high_gain: FloatParam::new(
+                "High gain",
+                db_to_gain(0.0),
+                FloatRange::Skewed {
+                    min: 0.0,
+                    max: 1.0,
+                    factor: FloatRange::skew_factor(-1.2),
+                },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
         }
     }
 }
@@ -192,17 +236,15 @@ impl Plugin for SaiSampler {
         };
 
         // setup filters
-        self.lpf_l = LinkwitzRileyLPF::new(1000.0, self.sr.into());
-        self.lpf_r = LinkwitzRileyLPF::new(1000.0, self.sr.into());
-        self.hpf_l = LinkwitzRileyHPF::new(1000.0, self.sr.into());
-        self.hpf_r = LinkwitzRileyHPF::new(1000.0, self.sr.into());
+        self.splitter_l = DynamicThreeBand24Slope::new(1000.0, 2000.0, self.sr.into());
+        self.splitter_r = MinimumThreeBand24Slope::new(1000.0, 2000.0, self.sr.into());
 
         // clear envelope
         self.env = None;
         // a filter to smooth the envelope
         // at 600Hz it settles in about 2ms
         // switch to 1000Hz to settle in about 1ms
-        self.env_filter = FirstOrderLPF::new(1000.0, self.sr.into());
+        self.env_filter = FixedQFilter::new(1000.0, self.sr.into());
 
         true
     }
@@ -225,10 +267,21 @@ impl Plugin for SaiSampler {
 
             // update params
             let gain_reduction_db = gain_to_db(self.params.gain_reduction.smoothed.next());
+            let low_gain = self.params.low_gain.smoothed.next() as f64;
+            let mid_gain = self.params.mid_gain.smoothed.next() as f64;
+            let high_gain = self.params.high_gain.smoothed.next() as f64;
             let precomp = self.params.precomp.smoothed.next() / 1000.0;
             let release = self.params.release.smoothed.next() / 1000.0;
             let low_crossover = self.params.low_crossover.smoothed.next();
-            let high_crossover = self.params.high_crossover.smoothed.next();
+            // limit high crossover to be 1 octave above low crossover
+            // (this is pro-mb's behaviour)
+            let min_high_crossover = low_crossover * 2.0;
+            let high_crossover = self
+                .params
+                .high_crossover
+                .smoothed
+                .next()
+                .max(min_high_crossover);
 
             debug_assert!(precomp <= self.latency_seconds);
 
@@ -245,6 +298,8 @@ impl Plugin for SaiSampler {
                             self.latency_seconds - precomp,
                             precomp,
                             release,
+                            EaseInSine,
+                            EaseInOutSine,
                         ));
                     }
                     // NoteEvent::NoteOff { note, .. } => (),
@@ -262,10 +317,10 @@ impl Plugin for SaiSampler {
             }
 
             // update filter frequency
-            self.lpf_l.set_frequency(low_crossover as Precision);
-            self.lpf_r.set_frequency(low_crossover as Precision);
-            self.hpf_l.set_frequency(low_crossover as Precision);
-            self.hpf_r.set_frequency(low_crossover as Precision);
+            self.splitter_l
+                .set_frequencies(low_crossover.into(), high_crossover.into());
+            self.splitter_r
+                .set_frequencies(low_crossover.into(), high_crossover.into());
 
             // left channel
             {
@@ -278,11 +333,10 @@ impl Plugin for SaiSampler {
                 // *sample = delayed_sample;
 
                 // process delayed sample
-                let hpf_sample = self.hpf_l.process_sample(delayed_sample as Precision);
-                let lpf_sample = self.lpf_l.process_sample(delayed_sample as Precision);
-
-                // return to sender
-                *sample = (lpf_sample - hpf_sample) as f32;
+                *sample = self
+                    .splitter_l
+                    .apply_gain(delayed_sample as f64, &[low_gain, mid_gain, high_gain])
+                    as f32;
             }
 
             // right channel
@@ -296,11 +350,10 @@ impl Plugin for SaiSampler {
                 // *sample = delayed_sample;
 
                 // process delayed sample
-                let hpf_sample = self.hpf_r.process_sample(delayed_sample as Precision);
-                let lpf_sample = self.lpf_r.process_sample(delayed_sample as Precision);
-
-                // return to sender
-                *sample = (lpf_sample - hpf_sample) as f32;
+                *sample = self
+                    .splitter_r
+                    .apply_gain(delayed_sample as f64, &[low_gain, mid_gain, high_gain])
+                    as f32;
             }
 
             // test process envelope
@@ -316,7 +369,7 @@ impl Plugin for SaiSampler {
             } else {
                 0.0
             };
-            env_val = self.env_filter.process_sample(env_val as Precision) as f32;
+            env_val = self.env_filter.process_sample(env_val.into()) as f32;
             for sample in channel_samples {
                 *sample = *sample * db_to_gain((env_val as f32) * gain_reduction_db);
                 amplitude += sample.abs();
@@ -395,6 +448,12 @@ impl Plugin for SaiSampler {
                         &params.high_crossover,
                         setter,
                     ));
+                    ui.label("low_gain");
+                    ui.add(widgets::ParamSlider::for_param(&params.low_gain, setter));
+                    ui.label("mid_gain");
+                    ui.add(widgets::ParamSlider::for_param(&params.mid_gain, setter));
+                    ui.label("high_gain");
+                    ui.add(widgets::ParamSlider::for_param(&params.high_gain, setter));
 
                     // ui.label(
                     //     "Also gain, but with a lame widget. Can't even render the value correctly!",
