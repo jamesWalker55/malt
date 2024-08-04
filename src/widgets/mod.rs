@@ -162,33 +162,32 @@ impl<'a, P: Param> SliderRegion<'a, P> {
 }
 
 pub(crate) struct ArcKnob<'a, P: Param> {
+    size: f32,
+    line_width: f32,
     slider_region: SliderRegion<'a, P>,
-    radius: f32,
     line_color: Color32,
     fill_color: Color32,
-    center_size: f32,
-    line_width: f32,
-    center_to_line_space: f32,
     hover_text: bool,
     hover_text_content: String,
-    padding: f32,
     arc_start: f32,
     arc_end: f32,
 }
 
 impl<'a, P: Param> ArcKnob<'a, P> {
-    pub(crate) fn for_param(param: &'a P, param_setter: &'a ParamSetter, radius: f32) -> Self {
+    pub(crate) fn for_param(
+        param: &'a P,
+        param_setter: &'a ParamSetter,
+        size: f32,
+        line_width: f32,
+    ) -> Self {
         ArcKnob {
+            size,
+            line_width,
             slider_region: SliderRegion::new(param, param_setter),
-            radius: radius,
             line_color: Color32::from_rgb(48, 200, 48),
             fill_color: Color32::from_rgb(70, 48, 48),
-            center_size: radius * 0.7,
-            line_width: radius * 0.3,
-            center_to_line_space: radius * 0.012,
             hover_text: true,
             hover_text_content: "Gain reduction".into(),
-            padding: 0.0,
             arc_start: 0.625,
             arc_end: -0.75,
         }
@@ -198,12 +197,9 @@ impl<'a, P: Param> ArcKnob<'a, P> {
 impl<'a, P: Param> Widget for ArcKnob<'a, P> {
     fn ui(mut self, ui: &mut Ui) -> Response {
         // Figure out the size to reserve on screen for widget
-        let desired_size: Vec2 = egui::vec2(
-            self.padding + self.radius * 2.0,
-            self.padding + self.radius * 3.0,
-        );
-
+        let desired_size = Vec2::splat(self.size);
         let mut response = ui.allocate_response(desired_size, Sense::click_and_drag());
+
         let value = self.slider_region.handle_response(&ui, &mut response);
 
         ui.vertical(|ui| {
@@ -218,7 +214,9 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
                         self.arc_start,
                         self.arc_end,
                         center,
-                        self.center_size + self.center_to_line_space + (self.line_width / 2.0),
+                        self.size / 2.0 * 0.7
+                            + self.size / 2.0 * 0.012
+                            + (self.size / 2.0 * 0.3 / 2.0),
                         1.0,
                         0.03,
                     ),
@@ -230,7 +228,7 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
             }
 
             // Draw the highlight line
-            let arc_radius = self.center_size + self.center_to_line_space;
+            let arc_radius = self.size / 2.0 * 0.7 + self.size / 2.0 * 0.012;
             {
                 let arc_stroke = Stroke::new(self.line_width, self.line_color);
                 let shape = Shape::Path(PathShape {
@@ -253,7 +251,7 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
             {
                 let circle_shape = Shape::Circle(CircleShape {
                     center: center,
-                    radius: self.center_size,
+                    radius: self.size / 2.0 * 0.7,
                     stroke: Stroke::new(0.0, Color32::TRANSPARENT),
                     fill: self.fill_color,
                 });
@@ -310,7 +308,10 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
                 }
                 // check for hover within knob region
                 ui.allocate_rect(
-                    Rect::from_center_size(center, Vec2::new(self.radius * 2.0, self.radius * 2.0)),
+                    Rect::from_center_size(
+                        center,
+                        Vec2::new(self.size / 2.0 * 2.0, self.size / 2.0 * 2.0),
+                    ),
                     Sense::hover(),
                 )
                 .on_hover_text_at_pointer(self.hover_text_content);
