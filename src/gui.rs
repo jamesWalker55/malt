@@ -155,7 +155,7 @@ pub(crate) fn create_gui(
                     ui.label(format!("band_height: {:?}", band_height));
 
                     let audio_module_3_knob =
-                        ArcKnob::for_param(&params.gain_reduction, setter, 56.0, 8.0);
+                        ArcKnob::for_param(&params.gain_reduction, setter, 34.0, 2.0);
                     ui.add(audio_module_3_knob);
                 });
 

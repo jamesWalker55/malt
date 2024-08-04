@@ -164,10 +164,10 @@ pub(crate) struct ArcKnob<'a, P: Param> {
     size: f32,
     line_width: f32,
     slider_region: SliderRegion<'a, P>,
+    highlight_color: Color32,
     line_color: Color32,
-    fill_color: Color32,
-    hover_text: bool,
-    hover_text_content: String,
+    bg_color: Color32,
+    knob_color: Color32,
     arc_start: f32,
     arc_end: f32,
 }
@@ -183,10 +183,10 @@ impl<'a, P: Param> ArcKnob<'a, P> {
             size,
             line_width,
             slider_region: SliderRegion::new(param, param_setter),
-            line_color: Color32::from_rgb(48, 200, 48),
-            fill_color: Color32::from_rgb(70, 48, 48),
-            hover_text: true,
-            hover_text_content: "Gain reduction".into(),
+            highlight_color: Color32::from_rgb(255, 245, 157),
+            line_color: Color32::from_rgb(245, 245, 245),
+            bg_color: Color32::from_rgb(64, 64, 64),
+            knob_color: Color32::from_rgb(33, 33, 33),
             // negative length to rotate clockwise
             // https://www.desmos.com/calculator/cctb9rqruw
             arc_start: -3.0 / 8.0 * TAU,
@@ -207,138 +207,114 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
             let painter = ui.painter_at(response.rect);
             let center = response.rect.center();
 
+            // since we will draw a stroke, we need to account for the line's width
+            // outline radius should be: size / 2.0 - line_width / 2.0
+            // this formula is the same, simplified:
+            let outline_radius = (self.size - self.line_width) / 2.0;
+            let center_radius = self.size / 2.0 - self.line_width;
+
             // Draw the inactive arc behind the highlight line
             {
-                let outline_stroke = Stroke::new(1.0, self.fill_color.linear_multiply(0.7));
-                let outline_shape = Shape::Path(PathShape {
+                let shape = Shape::Path(PathShape {
                     points: get_arc_points(
                         1.0,
                         self.arc_start,
                         self.arc_end,
                         center,
-                        self.size * 0.431,
+                        outline_radius,
                         0.2,
                     ),
                     closed: false,
-                    fill: self.fill_color.linear_multiply(0.7),
-                    stroke: outline_stroke,
+                    fill: Color32::TRANSPARENT,
+                    stroke: Stroke::new(self.line_width, self.bg_color),
                 });
-                painter.add(outline_shape);
+                painter.add(shape);
             }
 
             // Draw the highlight line
-            let arc_radius = self.size * 0.356;
             {
-                let arc_stroke = Stroke::new(self.line_width, self.line_color);
                 let shape = Shape::Path(PathShape {
                     points: get_arc_points(
                         value,
                         self.arc_start,
                         self.arc_end,
                         center,
-                        arc_radius,
+                        outline_radius,
                         0.2,
                     ),
                     closed: false,
                     fill: Color32::TRANSPARENT,
-                    stroke: arc_stroke,
+                    stroke: Stroke::new(self.line_width, self.highlight_color),
                 });
                 painter.add(shape);
             }
 
             // Center of Knob
             {
-                let circle_shape = Shape::Circle(CircleShape {
-                    center: center,
-                    radius: self.size * 0.35,
-                    stroke: Stroke::new(0.0, Color32::TRANSPARENT),
-                    fill: self.fill_color,
+                let shape = Shape::Circle(CircleShape {
+                    center,
+                    radius: center_radius,
+                    stroke: Stroke::NONE,
+                    fill: self.knob_color,
                 });
-                painter.add(circle_shape);
+                painter.add(shape);
             }
 
-            // Draw the knob center line
+            // Draw the knob marker line
             {
-                // "balls" are end caps for the stroke
-                let ball_width = self.line_width / 5.0;
-                let ball_line_stroke = Stroke::new(ball_width, self.line_color);
+                // make the marker line begin off-center
+                let inner_radius = center_radius * 0.35;
+                // make the marker line terminate just before it reaches the highlight ring
+                let outer_radius = outline_radius - self.line_width;
+
+                // find start and end point
+                let angle = lerp(self.arc_start, self.arc_end, value);
+                let start_point = {
+                    let x = center.x + inner_radius * angle.cos();
+                    let y = center.y + inner_radius * -angle.sin();
+                    pos2(x, y)
+                };
+                let end_point = {
+                    let x = center.x + outer_radius * angle.cos();
+                    let y = center.y + outer_radius * -angle.sin();
+                    pos2(x, y)
+                };
 
                 let line_shape = Shape::Path(PathShape {
-                    points: get_pointer_points(
-                        self.arc_start,
-                        self.arc_end,
-                        center,
-                        arc_radius + ball_width,
-                        value,
-                    ),
+                    points: vec![start_point, end_point],
                     closed: false,
                     fill: self.line_color,
-                    stroke: Stroke::new(ball_width * 3.0, self.line_color),
+                    stroke: Stroke::new(self.line_width, self.line_color),
                 });
                 painter.add(line_shape);
 
-                // Draw circles at ends of highlight line to mimic a rounded stroke
-                let end_ball = Shape::Circle(CircleShape {
-                    center: get_end_point(
-                        self.arc_start,
-                        self.arc_end,
-                        center,
-                        arc_radius + ball_width,
-                        value,
-                    ),
-                    radius: ball_width,
-                    fill: self.line_color,
-                    stroke: ball_line_stroke,
-                });
-                painter.add(end_ball);
-                let center_ball = Shape::Circle(CircleShape {
-                    center: center,
-                    radius: ball_width,
-                    fill: self.line_color,
-                    stroke: ball_line_stroke,
-                });
-                painter.add(center_ball);
+                if self.line_width > 3.0 {
+                    // Draw circles ("balls") at ends of highlight line to mimic a rounded stroke
+                    let ball_radius = self.line_width / 2.0 - 1.0;
+                    let end_ball = Shape::Circle(CircleShape {
+                        center: end_point,
+                        radius: ball_radius,
+                        fill: self.line_color,
+                        stroke: Stroke::NONE,
+                    });
+                    painter.add(end_ball);
+                    let center_ball = Shape::Circle(CircleShape {
+                        center: start_point,
+                        radius: ball_radius,
+                        fill: self.line_color,
+                        stroke: Stroke::NONE,
+                    });
+                    painter.add(center_ball);
+                }
             }
 
             // Show hover text
-            if self.hover_text {
-                if self.hover_text_content.is_empty() {
-                    self.hover_text_content = self.slider_region.get_string();
-                }
-                // check for hover within knob region
-                response
-                    .clone()
-                    .on_hover_text_at_pointer(self.hover_text_content);
-            }
+            response
+                .clone()
+                .on_hover_text_at_pointer(self.slider_region.get_string());
         });
         response
     }
-}
-
-fn get_end_point(start: f32, mut end: f32, center: Pos2, radius: f32, value: f32) -> Pos2 {
-    end = lerp(start, end, value);
-
-    let angle = end;
-    let x = center.x + radius * angle.cos();
-    let y = center.y + -radius * angle.sin();
-    pos2(x, y)
-}
-
-fn get_pointer_points(
-    start: f32,
-    mut end: f32,
-    center: Pos2,
-    radius: f32,
-    value: f32,
-) -> Vec<Pos2> {
-    end = lerp(start, end, value);
-
-    let angle = end;
-    let x = center.x + radius * angle.cos();
-    let y = center.y + radius * -angle.sin();
-    let short_x = center.x + radius * angle.cos() * 0.04;
-    let short_y = center.y + radius * -angle.sin() * 0.04;
-    vec![pos2(short_x, short_y), pos2(x, y)]
 }
 
 /// Return a bunch of points that lie on an arc.
