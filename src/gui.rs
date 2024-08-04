@@ -155,12 +155,7 @@ pub(crate) fn create_gui(
                     ui.label(format!("band_height: {:?}", band_height));
 
                     let audio_module_3_knob =
-                        ArcKnob::for_param(&params.gain_reduction, setter, 28.0)
-                            .preset_style()
-                            .set_fill_color(Color32::from_rgb(70, 48, 48))
-                            .set_line_color(Color32::from_rgb(48, 200, 48))
-                            .set_text_size(11.0)
-                            .set_hover_text("Gain reduction".into());
+                        ArcKnob::for_param(&params.gain_reduction, setter, 28.0);
                     ui.add(audio_module_3_knob);
                 });
 

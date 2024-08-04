@@ -187,58 +187,23 @@ impl<'a, P: Param> ArcKnob<'a, P> {
         ArcKnob {
             slider_region: SliderRegion::new(param, param_setter),
             radius: radius,
-            line_color: Color32::BLACK,
-            fill_color: Color32::BLACK,
-            center_size: 20.0,
-            line_width: 2.0,
-            center_to_line_space: 0.0,
-            hover_text: false,
-            hover_text_content: String::new(),
-            text_size: 16.0,
+            line_color: Color32::from_rgb(48, 200, 48),
+            fill_color: Color32::from_rgb(70, 48, 48),
+            center_size: radius * 0.7,
+            line_width: radius * 0.3,
+            center_to_line_space: radius * 0.012,
+            hover_text: true,
+            hover_text_content: "Gain reduction".into(),
+            text_size: 11.0,
             label_text: String::new(),
-            outline: false,
-            padding: 10.0,
+            outline: true,
+            padding: 0.0,
             show_label: true,
             text_color_override: Color32::PLACEHOLDER,
             readable_box: false,
             arc_start: 0.625,
             arc_end: -0.75,
         }
-    }
-
-    // Specify value when mouse-over
-    pub(crate) fn set_hover_text(mut self, new_text: String) -> Self {
-        self.hover_text_content = new_text;
-        self
-    }
-
-    // Specify line color for knob outside
-    pub(crate) fn set_line_color(mut self, new_color: Color32) -> Self {
-        self.line_color = new_color;
-        self
-    }
-
-    // Specify fill color for knob
-    pub(crate) fn set_fill_color(mut self, new_color: Color32) -> Self {
-        self.fill_color = new_color;
-        self
-    }
-
-    // Set text size for label
-    pub(crate) fn set_text_size(mut self, text_size: f32) -> Self {
-        self.text_size = text_size;
-        self
-    }
-
-    pub(crate) fn preset_style(mut self) -> Self {
-        // These are all calculated off radius to scale better
-        self.center_size = self.radius * 0.7;
-        self.line_width = self.radius * 0.3;
-        self.center_to_line_space = self.radius * 0.012;
-        self.padding = 0.0;
-        self.outline = true;
-        self.hover_text = true;
-        self
     }
 }
 
