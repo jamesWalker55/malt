@@ -10,6 +10,8 @@ mod voice;
 use biquad::{
     ButterworthLP, FirstOrderAP, FirstOrderLP, FixedQFilter, LinkwitzRileyHP, LinkwitzRileyLP,
 };
+use envelope::EaseInOutSine;
+use envelope::EaseInSine;
 use envelope::Envelope;
 use nih_plug::{buffer::ChannelSamples, prelude::*};
 use nih_plug_egui::{create_egui_editor, egui, widgets, EguiState};
@@ -28,7 +30,7 @@ pub struct SaiSampler {
     splitter_l: DynamicThreeBand24Slope,
     splitter_r: MinimumThreeBand24Slope,
     buf: AllocRingBuffer<f32>,
-    env: Option<Envelope>,
+    env: Option<Envelope<EaseInSine, EaseInOutSine>>,
     env_filter: FixedQFilter<FirstOrderLP>,
 
     /// The editor state, saved together with the parameter state so the custom scaling can be
@@ -296,6 +298,8 @@ impl Plugin for SaiSampler {
                             self.latency_seconds - precomp,
                             precomp,
                             release,
+                            EaseInSine,
+                            EaseInOutSine,
                         ));
                     }
                     // NoteEvent::NoteOff { note, .. } => (),

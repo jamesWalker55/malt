@@ -1,7 +1,8 @@
 use std::f32::consts::PI;
 
-pub(crate) struct Envelope {
+pub(crate) struct Envelope<A: Curve, R: Curve> {
     sr: f32,
+
     // I'm storing samples, because the samplerate shouldn't change in the middle of the song
     delay: f32,             // samples
     delay_remaining: f32,   // samples
@@ -9,17 +10,22 @@ pub(crate) struct Envelope {
     attack_remaining: f32,  // samples
     release: f32,           // samples
     release_remaining: f32, // samples
+
+    // curves that define this envelope
+    attack_curve: A,
+    release_curve: R,
 }
 
-impl Envelope {
-    /// The function that defines the easing curve
-    fn ease(x: f32) -> f32 {
-        // https://easings.net/#easeInOutSine
-        -((PI * x).cos() - 1.0) / 2.0
-    }
-
+impl<A: Curve, R: Curve> Envelope<A, R> {
     /// Arguments are in seconds
-    pub(crate) fn new(sample_rate: f32, delay: f32, attack: f32, release: f32) -> Self {
+    pub(crate) fn new(
+        sample_rate: f32,
+        delay: f32,
+        attack: f32,
+        release: f32,
+        attack_curve: A,
+        release_curve: R,
+    ) -> Self {
         // convert seconds to samples
         let delay = sample_rate * delay;
         let attack = sample_rate * attack;
@@ -33,6 +39,8 @@ impl Envelope {
             attack_remaining: attack,
             release,
             release_remaining: release,
+            attack_curve,
+            release_curve,
         }
     }
 
@@ -133,15 +141,15 @@ impl Envelope {
         } else if self.attack_remaining > 0.0 {
             // in attack phase
             let x = 1.0 - self.attack_remaining as f32 / self.attack as f32;
-            let y = Self::ease(x);
+            let y = self.attack_curve.get_y(x);
 
             self.attack_remaining -= 1.0;
 
             Some(y)
         } else if self.release_remaining > 0.0 {
             // in release phase
-            let x = self.release_remaining as f32 / self.release as f32;
-            let y = Self::ease(x);
+            let x = 1.0 - self.release_remaining as f32 / self.release as f32;
+            let y = 1.0 - self.release_curve.get_y(x);
 
             self.release_remaining -= 1.0;
 
@@ -150,5 +158,31 @@ impl Envelope {
             // is completed
             None
         }
+    }
+}
+
+/// This should define a graph that starts from 0.0 to 1.0.
+pub(crate) trait Curve {
+    /// Range of `x` is 0.0 to 1.0
+    ///
+    /// Output should be in range 0.0 to 1.0
+    fn get_y(&self, x: f32) -> f32;
+}
+
+pub(crate) struct EaseInOutSine;
+
+impl Curve for EaseInOutSine {
+    fn get_y(&self, x: f32) -> f32 {
+        // https://easings.net/#easeInOutSine
+        -((PI * x).cos() - 1.0) / 2.0
+    }
+}
+
+pub(crate) struct EaseInSine;
+
+impl Curve for EaseInSine {
+    fn get_y(&self, x: f32) -> f32 {
+        // https://easings.net/#easeInOutSine
+        1.0 - ((x * PI) / 2.0).cos()
     }
 }
