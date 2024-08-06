@@ -58,6 +58,9 @@ pub(crate) fn create_gui(
                     (TextStyle::Body, FontId::new(11.0, Proportional)),
                     (TextStyle::Small, FontId::new(10.0, Proportional)),
                     (TextStyle::Button, FontId::new(12.0, Proportional)),
+                    // nih-plug's ParamSlider uses monospace for some reason,
+                    // need to add this or else ParamSlider will panic
+                    (TextStyle::Monospace, FontId::new(11.0, Proportional)),
                 ]
                 .into();
 
