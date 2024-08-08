@@ -19,30 +19,7 @@ use std::{
 const GRANULAR_DRAG_MULTIPLIER: f32 = 0.001;
 const NORMAL_DRAG_MULTIPLIER: f32 = 0.005;
 
-static DRAG_NORMALIZED_START_VALUE_MEMORY_ID: Lazy<egui::Id> =
-    Lazy::new(|| egui::Id::new((file!(), 0)));
-static DRAG_AMOUNT_MEMORY_ID: Lazy<egui::Id> = Lazy::new(|| egui::Id::new((file!(), 1)));
-
-pub(crate) fn get_drag_normalized_start_value_memory(ui: &Ui) -> f32 {
-    ui.memory(|mem| mem.data.get_temp(*DRAG_NORMALIZED_START_VALUE_MEMORY_ID))
-        .unwrap_or(0.5)
-}
-
-pub(crate) fn set_drag_normalized_start_value_memory(ui: &Ui, amount: f32) {
-    ui.memory_mut(|mem| {
-        mem.data
-            .insert_temp(*DRAG_NORMALIZED_START_VALUE_MEMORY_ID, amount)
-    });
-}
-
-pub(crate) fn get_drag_amount_memory(ui: &Ui) -> f32 {
-    ui.memory(|mem| mem.data.get_temp(*DRAG_AMOUNT_MEMORY_ID))
-        .unwrap_or(0.0)
-}
-
-pub(crate) fn set_drag_amount_memory(ui: &Ui, amount: f32) {
-    ui.memory_mut(|mem| mem.data.insert_temp(*DRAG_AMOUNT_MEMORY_ID, amount));
-}
+static HOVER_AREA_ID: Lazy<egui::Id> = Lazy::new(|| egui::Id::new((file!(), "hover_area")));
 
 pub(crate) struct ArcKnob<'a, P: Param> {
     size: f32,
@@ -265,9 +242,32 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
             }
 
             // Show hover text
-            response
-                .clone()
-                .on_hover_text_at_pointer(self.param.to_string());
+            if response.hovered() {
+                use egui::*;
+
+                Area::new(*HOVER_AREA_ID)
+                    .order(Order::Tooltip)
+                    // top-left corner of area:
+                    .fixed_pos(Pos2::new(50.0, 100.0))
+                    .movable(false)
+                    .interactable(true)
+                    .show(ui.ctx(), |ui| {
+                        Frame::popup(&ui.ctx().style())
+                            .show(ui, |ui| {
+                                ui.label("WIP hover popup!");
+                                ui.label("WIP hover popup!");
+                                ui.label("WIP hover popup!");
+                                ui.label("WIP hover popup!");
+                                ui.label("WIP hover popup!");
+                            })
+                            .inner
+                    });
+
+                // see source code of this for reference:
+                // response
+                //     .clone()
+                //     .on_hover_text_at_pointer(self.param.to_string());
+            }
         });
         response
     }
