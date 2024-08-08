@@ -98,41 +98,6 @@ impl<'a, P: Param> ArcKnob<'a, P> {
         self.param_setter
             .set_parameter(self.param, self.param.default_plain_value());
     }
-
-    fn granular_drag(&self, ui: &Ui, drag_delta: Vec2) {
-        // Remember the intial position when we started with the granular drag. This value gets
-        // reset whenever we have a normal itneraction with the slider.
-        let start_value = if get_drag_amount_memory(ui) == 0.0 {
-            set_drag_normalized_start_value_memory(ui, self.normalized_value());
-            self.normalized_value()
-        } else {
-            get_drag_normalized_start_value_memory(ui)
-        };
-
-        let total_drag_distance = -drag_delta.y + get_drag_amount_memory(ui);
-        set_drag_amount_memory(ui, total_drag_distance);
-
-        self.set_normalized_value(
-            (start_value + (total_drag_distance * GRANULAR_DRAG_MULTIPLIER)).clamp(0.0, 1.0),
-        );
-    }
-
-    // Copied this to modify the normal drag behavior to not match a slider
-    fn normal_drag(&self, ui: &Ui, drag_delta: Vec2) {
-        let start_value = if get_drag_amount_memory(ui) == 0.0 {
-            set_drag_normalized_start_value_memory(ui, self.normalized_value());
-            self.normalized_value()
-        } else {
-            get_drag_normalized_start_value_memory(ui)
-        };
-
-        let total_drag_distance = -drag_delta.y + get_drag_amount_memory(ui);
-        set_drag_amount_memory(ui, total_drag_distance);
-
-        self.set_normalized_value(
-            (start_value + (total_drag_distance * NORMAL_DRAG_MULTIPLIER)).clamp(0.0, 1.0),
-        );
-    }
 }
 
 impl<'a, P: Param> Widget for ArcKnob<'a, P> {
@@ -141,38 +106,58 @@ impl<'a, P: Param> Widget for ArcKnob<'a, P> {
         let bounding_box = Vec2::splat(self.size);
         let mut response = ui.allocate_response(bounding_box, Sense::click_and_drag());
 
-        let value = {
+        // handle mouse click/drag events
+        //
+        // drag only occurs after (1) holding down mouse, then (2) moving mouse
+        // therefore `drag_started()` and `clicked()` cannot BOTH be true at the same frame
+        //
+        // when ctrl+clicking on the knob, reset the parameter
+        if response.clicked() && ui.input(|x| x.modifiers.command) {
+            self.param_setter.begin_set_parameter(self.param);
+            self.reset_param();
+            self.param_setter.end_set_parameter(self.param);
+            response.mark_changed();
+        } else {
+            // otherwise, check if user is dragging
+
+            // This executes on first frame of drag only
             if response.drag_started() {
-                // When beginning a drag or dragging normally, reset the memory used to keep track of
-                // our granular drag
                 self.param_setter.begin_set_parameter(self.param);
-                set_drag_amount_memory(ui, 0.0);
             }
+
+            // this checks when knob is clicked or dragged:
             if let Some(_clicked_pos) = response.interact_pointer_pos() {
-                if ui.input(|mem| mem.modifiers.command) {
-                    // Like double clicking, Ctrl+Click should reset the parameter
-                    self.reset_param();
+                let drag_distance = -response.drag_delta().y;
+
+                // check drag_delta to make sure we are actually dragging
+                if drag_distance != 0.0 {
+                    let value = self.normalized_value();
+
+                    // Shift dragging switches to a more granular input method
+                    let new_value = if ui.input(|mem| mem.modifiers.shift) {
+                        value + (drag_distance * GRANULAR_DRAG_MULTIPLIER)
+                    } else {
+                        value + (drag_distance * NORMAL_DRAG_MULTIPLIER)
+                    }
+                    .clamp(0.0, 1.0);
+
+                    self.set_normalized_value(new_value);
                     response.mark_changed();
-                } else if ui.input(|mem| mem.modifiers.shift) {
-                    // And shift dragging should switch to a more granular input method
-                    self.granular_drag(ui, response.drag_delta());
-                    response.mark_changed();
-                } else {
-                    self.normal_drag(ui, response.drag_delta());
-                    response.mark_changed();
-                    //set_drag_amount_memory(ui, 0.0);
                 }
             }
-            if response.double_clicked() {
-                self.reset_param();
-                response.mark_changed();
-            }
+
+            // TODO: Double-clicking should start text edit
+            // if response.double_clicked() {
+            //     self.reset_param();
+            //     response.mark_changed();
+            // }
+
             if response.drag_stopped() {
                 self.param_setter.end_set_parameter(self.param);
-                set_drag_amount_memory(ui, 0.0);
             }
-            self.normalized_value()
-        };
+        }
+
+        let value = self.normalized_value();
 
         ui.vertical(|ui| {
             let painter = ui.painter_at(response.rect);
