@@ -1,5 +1,7 @@
 use std::f32::consts::PI;
 
+use crate::pattern::Pattern;
+
 pub(crate) struct Envelope<A: Curve, R: Curve> {
     sr: f32,
 
@@ -112,7 +114,7 @@ impl<A: Curve, R: Curve> Envelope<A, R> {
         } else if self.release_remaining > 0.0 {
             // in release stage, stretch the remaining release duration
             let ratio = release / self.release;
-            self.release_remaining = self.release_remaining * ratio;
+            self.release_remaining *= ratio;
 
             // now we can update release as usual
             self.release = release;
@@ -129,6 +131,12 @@ impl<A: Curve, R: Curve> Envelope<A, R> {
         self.delay + self.attack + self.release
     }
 
+    /// Return the progress of this envelope in percentage (0.0 to 1.0)
+    pub(crate) fn progress(&self) -> f32 {
+        1.0 - ((self.delay_remaining + self.attack_remaining + self.release_remaining)
+            / (self.delay + self.attack + self.release))
+    }
+
     /// Get the current value (from 0.0 -- 1.0), then increment the state.
     /// If the envelope has completed, return `None`.
     ///
@@ -140,7 +148,7 @@ impl<A: Curve, R: Curve> Envelope<A, R> {
             Some(0.0)
         } else if self.attack_remaining > 0.0 {
             // in attack phase
-            let x = 1.0 - self.attack_remaining as f32 / self.attack as f32;
+            let x = 1.0 - self.attack_remaining / self.attack;
             let y = self.attack_curve.get_y(x);
 
             self.attack_remaining -= 1.0;
@@ -148,7 +156,7 @@ impl<A: Curve, R: Curve> Envelope<A, R> {
             Some(y)
         } else if self.release_remaining > 0.0 {
             // in release phase
-            let x = 1.0 - self.release_remaining as f32 / self.release as f32;
+            let x = 1.0 - self.release_remaining / self.release;
             let y = 1.0 - self.release_curve.get_y(x);
 
             self.release_remaining -= 1.0;
@@ -161,6 +169,22 @@ impl<A: Curve, R: Curve> Envelope<A, R> {
     }
 }
 
+impl<A: Curve + Default, R: Curve + Default> Default for Envelope<A, R> {
+    fn default() -> Self {
+        Self {
+            sr: Default::default(),
+            delay: Default::default(),
+            delay_remaining: Default::default(),
+            attack: Default::default(),
+            attack_remaining: Default::default(),
+            release: Default::default(),
+            release_remaining: Default::default(),
+            attack_curve: Default::default(),
+            release_curve: Default::default(),
+        }
+    }
+}
+
 /// This should define a graph that starts from 0.0 to 1.0.
 pub(crate) trait Curve {
     /// Range of `x` is 0.0 to 1.0
@@ -169,6 +193,7 @@ pub(crate) trait Curve {
     fn get_y(&self, x: f32) -> f32;
 }
 
+#[derive(Default)]
 pub(crate) struct EaseInOutSine;
 
 impl Curve for EaseInOutSine {
@@ -178,11 +203,18 @@ impl Curve for EaseInOutSine {
     }
 }
 
+#[derive(Default)]
 pub(crate) struct EaseInSine;
 
 impl Curve for EaseInSine {
     fn get_y(&self, x: f32) -> f32 {
         // https://easings.net/#easeInOutSine
         1.0 - ((x * PI) / 2.0).cos()
+    }
+}
+
+impl Curve for Pattern {
+    fn get_y(&self, x: f32) -> f32 {
+        self.get_y_at(x as f64) as f32
     }
 }

@@ -4,5 +4,5 @@
 # [package_name]
 # name = "Human Readable Plugin Name"  # defaults to <package_name>
 
-[sai_sampler]
-name = "SAI Sampler"
+[malt]
+name = "SAIAudio_Malt"

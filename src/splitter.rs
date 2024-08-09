@@ -5,7 +5,7 @@ use crate::{
         CookbookAP, CookbookHP, CookbookLP, FirstOrderAP, FixedQFilter, GainlessFilter,
         LinkwitzRileyHP, LinkwitzRileyLP,
     },
-    svf::{self, AllPass, GainFilter, HighShelf, LowShelf},
+    svf::{GainFilter, HighShelf, LowShelf},
 };
 
 type Precision = f64;
@@ -28,10 +28,10 @@ impl MinimumTwoBand24Slope {
     }
 
     pub(crate) fn set_frequency(&mut self, f: Precision) {
-        self.lpf1.set_frequency(f.into());
-        self.lpf2.set_frequency(f.into());
-        self.hpf1.set_frequency(f.into());
-        self.hpf2.set_frequency(f.into());
+        self.lpf1.set_frequency(f);
+        self.lpf2.set_frequency(f);
+        self.hpf1.set_frequency(f);
+        self.hpf2.set_frequency(f);
     }
 
     pub(crate) fn split_bands(&mut self, sample: Precision) -> [Precision; 2] {
@@ -60,8 +60,8 @@ impl MinimumTwoBand12Slope {
     }
 
     pub(crate) fn set_frequency(&mut self, f: Precision) {
-        self.lpf.set_frequency(f.into());
-        self.hpf.set_frequency(f.into());
+        self.lpf.set_frequency(f);
+        self.hpf.set_frequency(f);
     }
 
     pub(crate) fn split_bands(&mut self, sample: Precision) -> [Precision; 2] {
@@ -96,11 +96,11 @@ impl MinimumThreeBand12Slope {
     }
 
     pub(crate) fn set_frequencies(&mut self, f1: Precision, f2: Precision) {
-        self.apf.set_frequency(f2.into());
-        self.lpf1.set_frequency(f1.into());
-        self.hpf1.set_frequency(f1.into());
-        self.lpf2.set_frequency(f2.into());
-        self.hpf2.set_frequency(f2.into());
+        self.apf.set_frequency(f2);
+        self.lpf1.set_frequency(f1);
+        self.hpf1.set_frequency(f1);
+        self.lpf2.set_frequency(f2);
+        self.hpf2.set_frequency(f2);
     }
 
     pub(crate) fn split_bands(&mut self, sample: Precision) -> [Precision; 3] {
@@ -145,15 +145,15 @@ impl MinimumThreeBand24Slope {
     }
 
     pub(crate) fn set_frequencies(&mut self, f1: Precision, f2: Precision) {
-        self.lpf1.set_frequency(f1.into());
-        self.lpf2.set_frequency(f1.into());
-        self.lpf3.set_frequency(f2.into());
-        self.lpf4.set_frequency(f2.into());
-        self.hpf1.set_frequency(f1.into());
-        self.hpf2.set_frequency(f1.into());
-        self.hpf3.set_frequency(f2.into());
-        self.hpf4.set_frequency(f2.into());
-        self.apf.set_frequency(f2.into());
+        self.lpf1.set_frequency(f1);
+        self.lpf2.set_frequency(f1);
+        self.lpf3.set_frequency(f2);
+        self.lpf4.set_frequency(f2);
+        self.hpf1.set_frequency(f1);
+        self.hpf2.set_frequency(f1);
+        self.hpf3.set_frequency(f2);
+        self.hpf4.set_frequency(f2);
+        self.apf.set_frequency(f2);
     }
 
     pub(crate) fn split_bands(&mut self, sample: Precision) -> [Precision; 3] {
@@ -186,8 +186,8 @@ impl DynamicThreeBand24Slope {
     }
 
     pub(crate) fn set_frequencies(&mut self, f1: Precision, f2: Precision) {
-        self.lowshelf.set_frequency(f1.into());
-        self.highshelf.set_frequency(f2.into());
+        self.lowshelf.set_frequency(f1);
+        self.highshelf.set_frequency(f2);
     }
 
     pub(crate) fn apply_gain(
@@ -214,7 +214,7 @@ impl DynamicThreeBand24Slope {
             .process_sample(self.lowshelf.process_sample(sample));
 
         // then process with manual overall gain
-        sample = sample * mid_gain;
+        sample *= mid_gain;
 
         sample
     }

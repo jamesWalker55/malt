@@ -1,6 +1,5 @@
 mod biquad;
 mod envelope;
-mod gui;
 mod oscillator;
 mod parameter_formatters;
 mod pattern;
@@ -8,111 +7,312 @@ mod splitter;
 mod svf;
 mod voice;
 
-use biquad::{
-    ButterworthLP, FirstOrderAP, FirstOrderLP, FixedQFilter, LinkwitzRileyHP, LinkwitzRileyLP,
-};
+use biquad::{FirstOrderLP, FixedQFilter};
 use envelope::EaseInOutSine;
 use envelope::EaseInSine;
 use envelope::Envelope;
 use nih_plug::prelude::*;
-use nih_plug_egui::EguiState;
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
-use splitter::DynamicThreeBand24Slope;
+use splitter::MinimumThreeBand12Slope;
 use splitter::MinimumThreeBand24Slope;
 use std::sync::Arc;
 use util::{db_to_gain, gain_to_db};
 
-pub struct SaiSampler {
-    params: Arc<SaiSamplerParams>,
-    sr: f32,
-    latency_seconds: f32,
-    latency_samples: u32,
-    splitter_l: DynamicThreeBand24Slope,
-    splitter_r: MinimumThreeBand24Slope,
-    buf: AllocRingBuffer<f32>,
-    env: Option<Envelope<EaseInSine, EaseInOutSine>>,
-    env_filter: FixedQFilter<FirstOrderLP>,
+const CROSSOVER_MIN_HZ: f32 = 10.0;
+const CROSSOVER_MAX_HZ: f32 = 20000.0;
+const MAX_LATENCY_SECONDS: f32 = 0.01;
 
-    /// The editor state, saved together with the parameter state so the custom scaling can be
-    /// restored.
-    // #[persist = "editor-state"]
-    editor_state: Arc<EguiState>,
-    /// The current data for the peak meter. This is stored as an [`Arc`] so we can share it between
-    /// the GUI and the audio processing parts. If you have more state to share, then it's a good
-    /// idea to put all of that in a struct behind a single `Arc`.
-    ///
-    /// This is stored as voltage gain.
-    peak_meter: Arc<AtomicF32>,
+enum MultibandGainApplier {
+    ThreeBand24(splitter::MinimumThreeBand24Slope),
+    ThreeBand12(splitter::MinimumThreeBand12Slope),
 }
 
-impl Default for SaiSampler {
-    fn default() -> Self {
-        Self {
-            params: Arc::new(SaiSamplerParams::default()),
-            // these fields are not initialised here, see `initialize()` for the actual values
-            sr: 0.0,
-            latency_seconds: 0.0,
-            latency_samples: 0,
-            splitter_l: DynamicThreeBand24Slope::new(0.0, 0.0, 0.0),
-            splitter_r: MinimumThreeBand24Slope::new(0.0, 0.0, 0.0),
-            buf: AllocRingBuffer::new(1),
-            env: None,
-            env_filter: FixedQFilter::new(0.0, 0.0),
-            // TEMP
-            peak_meter: Arc::new(AtomicF32::new(util::MINUS_INFINITY_DB)),
-            editor_state: EguiState::from_size(gui::GUI_WIDTH, gui::GUI_HEIGHT),
+impl MultibandGainApplier {
+    /// Gain is scalar, 0.0 to 1.0 and beyond
+    fn apply_gain(&mut self, sample: f64, gains: &[f64; 3]) -> f64 {
+        match self {
+            MultibandGainApplier::ThreeBand24(splitter) => splitter.apply_gain(sample, gains),
+            MultibandGainApplier::ThreeBand12(splitter) => splitter.apply_gain(sample, gains),
+        }
+    }
+
+    pub(crate) fn set_frequencies(&mut self, f1: f64, f2: f64) {
+        match self {
+            MultibandGainApplier::ThreeBand24(splitter) => {
+                splitter.set_frequencies(f1, f2);
+            }
+            MultibandGainApplier::ThreeBand12(splitter) => {
+                splitter.set_frequencies(f1, f2);
+            }
         }
     }
 }
 
-#[derive(Params)]
-struct SaiSamplerParams {
-    #[id = "gain_reduction"]
-    pub gain_reduction: FloatParam,
-    #[id = "precomp"]
-    pub precomp: FloatParam,
-    #[id = "release"]
-    pub release: FloatParam,
-    #[id = "low_crossover"]
-    pub low_crossover: FloatParam,
-    #[id = "high_crossover"]
-    pub high_crossover: FloatParam,
-    #[id = "low_gain"]
-    pub low_gain: FloatParam,
-    #[id = "mid_gain"]
-    pub mid_gain: FloatParam,
-    #[id = "high_gain"]
-    pub high_gain: FloatParam,
+struct EnvelopeLane<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> {
+    sr: f64,
+    latency_seconds: f32,
+    voices: [Option<Envelope<A, R>>; VOICES],
+    filter: FixedQFilter<FirstOrderLP>,
+    smooth: bool,
 }
 
-impl Default for SaiSamplerParams {
+impl<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> EnvelopeLane<A, R, VOICES> {
+    const EMPTY_VOICE: Option<Envelope<A, R>> = None;
+
+    fn default_filter(sr: f64) -> FixedQFilter<FirstOrderLP> {
+        FixedQFilter::new(1000.0, sr)
+    }
+
+    fn new(sr: f64, latency_seconds: f32, smooth: bool) -> Self {
+        Self {
+            sr,
+            latency_seconds,
+            voices: [Self::EMPTY_VOICE; VOICES],
+            filter: Self::default_filter(sr),
+            smooth,
+        }
+    }
+
+    fn add(&mut self, precomp: f32, decay: f32, attack_curve: A, release_curve: R) {
+        let env = Envelope::new(
+            self.sr as f32,
+            self.latency_seconds - precomp,
+            precomp,
+            decay,
+            attack_curve,
+            release_curve,
+        );
+
+        let insertion_idx = {
+            // insert into an empty cell
+            match self.voices.iter().position(|x| x.is_none()) {
+                Some(idx) => idx,
+                // if no empty cells, find the envelope that's closest to finishing
+                None => {
+                    self.voices
+                        .iter()
+                        .enumerate()
+                        .max_by(|(_, opt1), (_, opt2)| match (opt1, opt2) {
+                            (None, None) => unreachable!(),
+                            (None, Some(_)) => unreachable!(),
+                            (Some(_), None) => unreachable!(),
+                            (Some(voice1), Some(voice2)) => {
+                                voice1.progress().total_cmp(&voice2.progress())
+                            }
+                        })
+                        .expect("envelope lane must have size of at least 1")
+                        .0
+                }
+            }
+        };
+
+        self.voices[insertion_idx] = Some(env);
+    }
+
+    fn set_release(&mut self, release: f32) {
+        for voice in &mut self.voices {
+            let Some(voice) = voice else {
+                continue;
+            };
+
+            voice.set_release(release);
+        }
+    }
+
+    fn set_smooth(&mut self, smooth: bool) {
+        if smooth == self.smooth {
+            return;
+        }
+
+        self.smooth = smooth;
+        // reset filter to avoid pops and clicks
+        self.filter = Self::default_filter(self.sr);
+    }
+
+    /// Latency shouldn't be automatable.
+    /// For voices that already exist, just leave them as is (with original latency)
+    /// I can't be arsed to implement latency adjustment for envelopes
+    fn set_latency_seconds(&mut self, latency_seconds: f32) {
+        if latency_seconds == self.latency_seconds {
+            return;
+        }
+
+        self.latency_seconds = latency_seconds;
+    }
+
+    fn tick(&mut self) -> f32 {
+        // collect all envelope values into a single value
+        let result = self
+            .voices
+            .iter_mut()
+            .filter_map(|x| match x {
+                Some(voice) => voice.tick(),
+                None => None,
+            })
+            // use `max_by()` to get the highest envelope at this point.
+            // if you want the envelopes to stack, use `sum()` instead.
+            .max_by(|a, b| a.total_cmp(b))
+            .unwrap_or(0.0);
+
+        // remove inactive envelopes
+        for cell in &mut self.voices {
+            {
+                let Some(voice) = cell else {
+                    continue;
+                };
+
+                if !voice.is_complete() {
+                    continue;
+                }
+            };
+
+            // the cell is filled, and the voice is complete
+            // clear it now
+            *cell = None;
+        }
+
+        if !self.smooth {
+            return result;
+        }
+
+        self.filter.process_sample(result as f64) as f32
+    }
+}
+
+pub struct Malt {
+    params: Arc<MaltParams>,
+    // fixed variables (per session)
+    sr: f32,
+    max_latency_samples: usize,
+    // audio processing stuff:
+    splitter_l: MultibandGainApplier,
+    splitter_r: MultibandGainApplier,
+    env_low: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
+    env_mid: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
+    env_high: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
+    latency_buf_l: AllocRingBuffer<f32>,
+    latency_buf_r: AllocRingBuffer<f32>,
+    // keep track of when parameters get changed:
+    latency_seconds: f32,
+    latency_samples: usize,
+    current_slope: Slope,
+}
+
+impl Default for Malt {
     fn default() -> Self {
         Self {
-            gain_reduction: FloatParam::new(
-                "Gain Reduction",
-                db_to_gain(-30.0),
-                FloatRange::Skewed {
-                    min: 0.0,
-                    max: 1.0,
-                    factor: FloatRange::skew_factor(-1.2),
-                },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-            precomp: FloatParam::new(
-                "Precomp",
+            params: Arc::new(MaltParams::default()),
+            // these fields are not initialised here, see `initialize()` for the actual values
+            sr: 0.0,
+            latency_seconds: 0.0,
+            latency_samples: 0,
+            max_latency_samples: 0,
+            current_slope: Slope::F24,
+            splitter_l: MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
+                0.0, 0.0, 0.0,
+            )),
+            splitter_r: MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
+                0.0, 0.0, 0.0,
+            )),
+            latency_buf_l: AllocRingBuffer::new(1),
+            latency_buf_r: AllocRingBuffer::new(1),
+            env_low: EnvelopeLane::new(0.0, 0.0, false),
+            env_mid: EnvelopeLane::new(0.0, 0.0, false),
+            env_high: EnvelopeLane::new(0.0, 0.0, false),
+        }
+    }
+}
+
+#[derive(Enum, PartialEq, Eq)]
+enum Slope {
+    #[id = "fixed_24"]
+    #[name = "24 dB/octave"]
+    F24,
+    #[id = "fixed_12"]
+    #[name = "12 dB/octave"]
+    F12,
+}
+
+#[derive(Params)]
+struct MaltParams {
+    #[id = "low_precomp"]
+    pub(crate) low_precomp: FloatParam,
+    #[id = "mid_precomp"]
+    pub(crate) mid_precomp: FloatParam,
+    #[id = "high_precomp"]
+    pub(crate) high_precomp: FloatParam,
+
+    #[id = "low_decay"]
+    pub(crate) low_decay: FloatParam,
+    #[id = "mid_decay"]
+    pub(crate) mid_decay: FloatParam,
+    #[id = "high_decay"]
+    pub(crate) high_decay: FloatParam,
+
+    // gain is scalar, 0.0 -- 1.0
+    #[id = "low_gain"]
+    pub(crate) low_gain: FloatParam,
+    #[id = "mid_gain"]
+    pub(crate) mid_gain: FloatParam,
+    #[id = "high_gain"]
+    pub(crate) high_gain: FloatParam,
+
+    #[id = "low_crossover"]
+    pub(crate) low_crossover: FloatParam,
+    #[id = "high_crossover"]
+    pub(crate) high_crossover: FloatParam,
+
+    #[id = "crossover_slope"]
+    pub(crate) crossover_slope: EnumParam<Slope>,
+
+    #[id = "smoothing"]
+    pub(crate) smoothing: BoolParam,
+    #[id = "lookahead"]
+    pub(crate) lookahead: FloatParam,
+
+    #[id = "bypass"]
+    pub(crate) bypass: BoolParam,
+    #[id = "mix"]
+    pub(crate) mix: FloatParam,
+}
+
+impl Default for MaltParams {
+    fn default() -> Self {
+        Self {
+            low_precomp: FloatParam::new(
+                "Low precomp",
                 10.0,
                 FloatRange::Linear {
                     min: 0.0,
-                    max: 10.0,
+                    max: MAX_LATENCY_SECONDS * 1000.0,
                 },
             )
             .with_value_to_string(v2s_f32_ms_then_s(3))
             .with_string_to_value(s2v_f32_ms_then_s()),
-            release: FloatParam::new(
-                "Release",
+            mid_precomp: FloatParam::new(
+                "Mid precomp",
+                10.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: MAX_LATENCY_SECONDS * 1000.0,
+                },
+            )
+            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_string_to_value(s2v_f32_ms_then_s()),
+            high_precomp: FloatParam::new(
+                "High precomp",
+                10.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: MAX_LATENCY_SECONDS * 1000.0,
+                },
+            )
+            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_string_to_value(s2v_f32_ms_then_s()),
+
+            low_decay: FloatParam::new(
+                "Low decay",
                 100.0,
                 // these settings are similar to FabFilter Pro-C's release
                 FloatRange::Skewed {
@@ -123,31 +323,34 @@ impl Default for SaiSamplerParams {
             )
             .with_value_to_string(v2s_f32_ms_then_s(3))
             .with_string_to_value(s2v_f32_ms_then_s()),
-            low_crossover: FloatParam::new(
-                "Low Crossover",
-                120.0,
+            mid_decay: FloatParam::new(
+                "Mid decay",
+                100.0,
+                // these settings are similar to FabFilter Pro-C's release
                 FloatRange::Skewed {
                     min: 10.0,
-                    max: 20000.0,
-                    factor: FloatRange::skew_factor(-2.0),
+                    max: 2500.0,
+                    factor: FloatRange::skew_factor(-1.6),
                 },
             )
-            .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
-            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
-            high_crossover: FloatParam::new(
-                "High Crossover",
-                2500.0,
+            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_string_to_value(s2v_f32_ms_then_s()),
+            high_decay: FloatParam::new(
+                "High decay",
+                100.0,
+                // these settings are similar to FabFilter Pro-C's release
                 FloatRange::Skewed {
                     min: 10.0,
-                    max: 20000.0,
-                    factor: FloatRange::skew_factor(-2.0),
+                    max: 2500.0,
+                    factor: FloatRange::skew_factor(-1.6),
                 },
             )
-            .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
-            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
+            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_string_to_value(s2v_f32_ms_then_s()),
+
             low_gain: FloatParam::new(
-                "Low gain",
-                db_to_gain(0.0),
+                "Low gain reduction",
+                db_to_gain(-30.0),
                 FloatRange::Skewed {
                     min: 0.0,
                     max: 1.0,
@@ -158,8 +361,8 @@ impl Default for SaiSamplerParams {
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             mid_gain: FloatParam::new(
-                "Mid gain",
-                db_to_gain(0.0),
+                "Mid gain reduction",
+                db_to_gain(-30.0),
                 FloatRange::Skewed {
                     min: 0.0,
                     max: 1.0,
@@ -170,8 +373,8 @@ impl Default for SaiSamplerParams {
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             high_gain: FloatParam::new(
-                "High gain",
-                db_to_gain(0.0),
+                "High gain reduction",
+                db_to_gain(-30.0),
                 FloatRange::Skewed {
                     min: 0.0,
                     max: 1.0,
@@ -181,15 +384,56 @@ impl Default for SaiSamplerParams {
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+
+            low_crossover: FloatParam::new(
+                "Low crossover",
+                120.0,
+                FloatRange::Skewed {
+                    min: CROSSOVER_MIN_HZ,
+                    max: CROSSOVER_MAX_HZ,
+                    factor: FloatRange::skew_factor(-2.0),
+                },
+            )
+            .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
+            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
+            high_crossover: FloatParam::new(
+                "High crossover",
+                2500.0,
+                FloatRange::Skewed {
+                    min: CROSSOVER_MIN_HZ,
+                    max: CROSSOVER_MAX_HZ,
+                    factor: FloatRange::skew_factor(-2.0),
+                },
+            )
+            .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
+            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
+
+            crossover_slope: EnumParam::new("Crossover slope", Slope::F24),
+            smoothing: BoolParam::new("Smoothing", true),
+            lookahead: FloatParam::new(
+                "Lookahead",
+                10.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: MAX_LATENCY_SECONDS * 1000.0,
+                },
+            )
+            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_string_to_value(s2v_f32_ms_then_s()),
+
+            bypass: BoolParam::new("Bypass", false),
+            mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_percentage(3))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
         }
     }
 }
 
-impl Plugin for SaiSampler {
-    const NAME: &'static str = "SAI Sampler";
-    const VENDOR: &'static str = "James Walker";
+impl Plugin for Malt {
+    const NAME: &'static str = "Malt";
+    const VENDOR: &'static str = "SAI Audio";
     const URL: &'static str = env!("CARGO_PKG_HOMEPAGE");
-    const EMAIL: &'static str = "your@email.com";
+    const EMAIL: &'static str = "hello@example.com";
 
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -221,36 +465,53 @@ impl Plugin for SaiSampler {
         _buffer_config: &BufferConfig,
         _context: &mut impl InitContext<Self>,
     ) -> bool {
+        // constants per session
         self.sr = _buffer_config.sample_rate;
+        self.max_latency_samples = (MAX_LATENCY_SECONDS * self.sr).round() as usize;
 
-        // report latency
-        const LATENCY_SECONDS: f32 = 0.01;
-        self.latency_seconds = LATENCY_SECONDS;
-        self.latency_samples = (LATENCY_SECONDS * self.sr).round() as u32;
-        _context.set_latency_samples(self.latency_samples);
-
-        // times 2 for 2 channels
-        self.buf = {
-            let mut buf = AllocRingBuffer::new((self.latency_samples * 2).try_into().unwrap());
+        // allocate buffers for storing old samples
+        // buffer length should be `self.max_latency_samples`
+        self.latency_buf_l = {
+            let mut buf = AllocRingBuffer::new(self.max_latency_samples);
             buf.fill(0.0);
             buf
         };
-
-        // setup filters
-        self.splitter_l = DynamicThreeBand24Slope::new(1000.0, 2000.0, self.sr.into());
-        self.splitter_r = MinimumThreeBand24Slope::new(1000.0, 2000.0, self.sr.into());
-
-        // clear envelope
-        self.env = None;
-        // a filter to smooth the envelope
-        // at 600Hz it settles in about 2ms
-        // switch to 1000Hz to settle in about 1ms
-        self.env_filter = FixedQFilter::new(1000.0, self.sr.into());
+        self.latency_buf_r = self.latency_buf_l.clone();
 
         true
     }
 
-    fn reset(&mut self) {}
+    fn reset(&mut self) {
+        // setup filters
+        self.current_slope = self.params.crossover_slope.value();
+        self.splitter_l = MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
+            1000.0,
+            2000.0,
+            self.sr.into(),
+        ));
+        self.splitter_r = MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
+            1000.0,
+            2000.0,
+            self.sr.into(),
+        ));
+
+        // clear envelope
+        self.env_low = EnvelopeLane::new(
+            self.sr.into(),
+            self.latency_seconds,
+            self.params.smoothing.value(),
+        );
+        self.env_mid = EnvelopeLane::new(
+            self.sr.into(),
+            self.latency_seconds,
+            self.params.smoothing.value(),
+        );
+        self.env_high = EnvelopeLane::new(
+            self.sr.into(),
+            self.latency_seconds,
+            self.params.smoothing.value(),
+        );
+    }
 
     fn process(
         &mut self,
@@ -259,32 +520,91 @@ impl Plugin for SaiSampler {
         ctx: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         debug_assert_eq!(buffer.channels(), 2);
+        // handle if latency has changed
+        {
+            let new_lookahread = self.params.lookahead.value() / 1000.0;
+            if new_lookahread != self.latency_seconds {
+                self.latency_seconds = new_lookahread;
+                self.latency_samples = (new_lookahread * self.sr).round() as usize;
+                ctx.set_latency_samples(self.latency_samples as u32);
+
+                // update latency for envelopes
+                self.env_low.set_latency_seconds(self.latency_seconds);
+                self.env_mid.set_latency_seconds(self.latency_seconds);
+                self.env_high.set_latency_seconds(self.latency_seconds);
+            }
+        }
+        // handle crossover slope change
+        {
+            let new_slope = self.params.crossover_slope.value();
+            if new_slope != self.current_slope {
+                // replace splitters with new slopes
+                self.current_slope = new_slope;
+                match self.current_slope {
+                    Slope::F24 => {
+                        self.splitter_l = MultibandGainApplier::ThreeBand24(
+                            MinimumThreeBand24Slope::new(1000.0, 2000.0, self.sr.into()),
+                        );
+                        self.splitter_r = MultibandGainApplier::ThreeBand24(
+                            MinimumThreeBand24Slope::new(1000.0, 2000.0, self.sr.into()),
+                        );
+                    }
+                    Slope::F12 => {
+                        self.splitter_l = MultibandGainApplier::ThreeBand12(
+                            MinimumThreeBand12Slope::new(1000.0, 2000.0, self.sr.into()),
+                        );
+                        self.splitter_r = MultibandGainApplier::ThreeBand12(
+                            MinimumThreeBand12Slope::new(1000.0, 2000.0, self.sr.into()),
+                        );
+                    }
+                }
+            }
+        }
+        // handle smoothing change
+        {
+            let smoothing = self.params.smoothing.value();
+            self.env_low.set_smooth(smoothing);
+            self.env_mid.set_smooth(smoothing);
+            self.env_high.set_smooth(smoothing);
+        }
+
+        let bypass = self.params.bypass.value();
 
         let mut next_event = ctx.next_event();
 
         for (sample_id, mut channel_samples) in buffer.iter_samples().enumerate() {
-            // GUI-specific variables
-            let mut amplitude = 0.0;
-
             // update params
-            let gain_reduction_db = gain_to_db(self.params.gain_reduction.smoothed.next());
-            let low_gain = self.params.low_gain.smoothed.next() as f64;
-            let mid_gain = self.params.mid_gain.smoothed.next() as f64;
-            let high_gain = self.params.high_gain.smoothed.next() as f64;
-            let precomp = self.params.precomp.smoothed.next() / 1000.0;
-            let release = self.params.release.smoothed.next() / 1000.0;
-            let low_crossover = self.params.low_crossover.smoothed.next();
-            // limit high crossover to be 1 octave above low crossover
-            // (this is pro-mb's behaviour)
-            let min_high_crossover = low_crossover * 2.0;
-            let high_crossover = self
-                .params
-                .high_crossover
-                .smoothed
-                .next()
-                .max(min_high_crossover);
-
-            debug_assert!(precomp <= self.latency_seconds);
+            let low_precomp = {
+                let value = self.params.low_precomp.smoothed.next() / 1000.0;
+                value.min(self.latency_seconds)
+            };
+            let mid_precomp = {
+                let value = self.params.mid_precomp.smoothed.next() / 1000.0;
+                value.min(self.latency_seconds)
+            };
+            let high_precomp = {
+                let value = self.params.high_precomp.smoothed.next() / 1000.0;
+                value.min(self.latency_seconds)
+            };
+            let low_decay = self.params.low_decay.smoothed.next() / 1000.0;
+            let mid_decay = self.params.mid_decay.smoothed.next() / 1000.0;
+            let high_decay = self.params.high_decay.smoothed.next() / 1000.0;
+            let low_max_gain_db = -gain_to_db(self.params.low_gain.smoothed.next());
+            let mid_max_gain_db = -gain_to_db(self.params.mid_gain.smoothed.next());
+            let high_max_gain_db = -gain_to_db(self.params.high_gain.smoothed.next());
+            let low_crossover = {
+                let value = self.params.low_crossover.smoothed.next();
+                // since high crossover will be 1 octave above this, this cannot be too high
+                value.min(CROSSOVER_MAX_HZ / 2.0)
+            };
+            let high_crossover = {
+                // limit high crossover to be 1 octave above low crossover
+                // (this is pro-mb's behaviour)
+                let value = self.params.high_crossover.smoothed.next();
+                let min_value = low_crossover * 2.0;
+                value.max(min_value)
+            };
+            let mix = self.params.mix.smoothed.next();
 
             // handle MIDI events
             while let Some(event) = next_event {
@@ -292,30 +612,22 @@ impl Plugin for SaiSampler {
                     break;
                 }
 
-                match event {
-                    NoteEvent::NoteOn { note, .. } => {
-                        self.env = Some(Envelope::new(
-                            self.sr,
-                            self.latency_seconds - precomp,
-                            precomp,
-                            release,
-                            EaseInSine,
-                            EaseInOutSine,
-                        ));
-                    }
-                    // NoteEvent::NoteOff { note, .. } => (),
-                    // NoteEvent::Choke { note, .. } => (),
-                    // NoteEvent::MidiPitchBend { value, .. } => (),
-                    _ => (),
+                if let NoteEvent::NoteOn { .. } = event {
+                    self.env_low
+                        .add(low_precomp, low_decay, EaseInSine, EaseInOutSine);
+                    self.env_mid
+                        .add(mid_precomp, mid_decay, EaseInSine, EaseInOutSine);
+                    self.env_high
+                        .add(high_precomp, high_decay, EaseInSine, EaseInOutSine);
                 }
 
                 next_event = ctx.next_event();
             }
 
             // update existing envelopes (if any)
-            if let Some(env) = &mut self.env {
-                env.set_release(release);
-            }
+            self.env_low.set_release(low_decay);
+            self.env_mid.set_release(mid_decay);
+            self.env_high.set_release(high_decay);
 
             // update filter frequency
             self.splitter_l
@@ -323,14 +635,49 @@ impl Plugin for SaiSampler {
             self.splitter_r
                 .set_frequencies(low_crossover.into(), high_crossover.into());
 
+            #[inline(always)]
+            fn calculate_final_gain(env_val: f64, max_gain_db: f64, mix: f64, bypass: bool) -> f64 {
+                if bypass {
+                    1.0
+                } else {
+                    let new_gain = db_to_gain(-(max_gain_db * env_val) as f32) as f64;
+                    // mix should operate scalar-wise, not in dB units
+                    // i.e. don't put `mix` inside the `db_to_gain` function
+                    mix * (new_gain - 1.0) + 1.0
+                }
+            }
+
+            // tick envelopes and get gain value
+            // we intentionally always call envelope's `tick()` even when bypassed:
+            let low_gain = calculate_final_gain(
+                self.env_low.tick() as f64,
+                low_max_gain_db as f64,
+                mix as f64,
+                bypass,
+            ) as f64;
+            let mid_gain = calculate_final_gain(
+                self.env_mid.tick() as f64,
+                mid_max_gain_db as f64,
+                mix as f64,
+                bypass,
+            ) as f64;
+            let high_gain = calculate_final_gain(
+                self.env_high.tick() as f64,
+                high_max_gain_db as f64,
+                mix as f64,
+                bypass,
+            ) as f64;
+
+            let latency_buf_offset = self.max_latency_samples - self.latency_samples;
+
             // left channel
             {
                 let sample = channel_samples.get_mut(0).unwrap();
 
                 // the sample from eons ago (the latency)
-                let delayed_sample = *self.buf.get(0).unwrap();
+                let delayed_sample = *self.latency_buf_l.get(latency_buf_offset).unwrap();
                 // push sample to buffer queue
-                self.buf.push(*sample);
+                self.latency_buf_l.push(*sample);
                 // *sample = delayed_sample;
 
                 // process delayed sample
@@ -345,9 +692,9 @@ impl Plugin for SaiSampler {
                 let sample = channel_samples.get_mut(1).unwrap();
 
                 // the sample from eons ago (the latency)
-                let delayed_sample = *self.buf.get(0).unwrap();
+                let delayed_sample = *self.latency_buf_r.get(latency_buf_offset).unwrap();
                 // push sample to buffer queue
-                self.buf.push(*sample);
+                self.latency_buf_r.push(*sample);
                 // *sample = delayed_sample;
 
                 // process delayed sample
@@ -356,57 +703,14 @@ impl Plugin for SaiSampler {
                     .apply_gain(delayed_sample as f64, &[low_gain, mid_gain, high_gain])
                     as f32;
             }
-
-            // test process envelope
-            let mut env_val = if let Some(env) = &mut self.env {
-                let x = env.tick();
-                if let Some(x) = x {
-                    x
-                } else {
-                    // envelope has ended
-                    self.env = None;
-                    0.0
-                }
-            } else {
-                0.0
-            };
-            env_val = self.env_filter.process_sample(env_val.into()) as f32;
-            for sample in channel_samples {
-                *sample = *sample * db_to_gain((env_val as f32) * gain_reduction_db);
-                amplitude += sample.abs();
-                // *sample = *sample * env_val as f32;
-            }
-
-            // GUI-specific code
-            if self.editor_state.is_open() {
-                // divide by 2 channels
-                amplitude = amplitude / 2.0;
-                let current_peak_meter = self.peak_meter.load(std::sync::atomic::Ordering::Relaxed);
-                const PEAK_METER_DECAY_MS: f64 = 150.0;
-                let peak_meter_decay_weight =
-                    0.25f64.powf((self.sr as f64 * PEAK_METER_DECAY_MS / 1000.0).recip()) as f32;
-                let new_peak_meter = if amplitude > current_peak_meter {
-                    amplitude
-                } else {
-                    current_peak_meter * peak_meter_decay_weight
-                        + amplitude * (1.0 - peak_meter_decay_weight)
-                };
-
-                self.peak_meter
-                    .store(new_peak_meter, std::sync::atomic::Ordering::Relaxed)
-            }
         }
 
         ProcessStatus::Normal
     }
-
-    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        gui::create_gui(self, _async_executor)
-    }
 }
 
-impl ClapPlugin for SaiSampler {
-    const CLAP_ID: &'static str = "com.sai-audio.sai-sampler";
+impl ClapPlugin for Malt {
+    const CLAP_ID: &'static str = "com.sai-audio.malt";
     const CLAP_DESCRIPTION: Option<&'static str> = None;
     const CLAP_MANUAL_URL: Option<&'static str> = None;
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
@@ -414,12 +718,12 @@ impl ClapPlugin for SaiSampler {
     const CLAP_FEATURES: &'static [ClapFeature] = &[ClapFeature::AudioEffect, ClapFeature::Stereo];
 }
 
-impl Vst3Plugin for SaiSampler {
-    const VST3_CLASS_ID: [u8; 16] = *b"WMbSpkNDqN0uignG";
+impl Vst3Plugin for Malt {
+    const VST3_CLASS_ID: [u8; 16] = *b"F34E6qkOzK76mc0Q";
 
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] =
         &[Vst3SubCategory::Fx, Vst3SubCategory::Dynamics];
 }
 
-nih_export_clap!(SaiSampler);
-nih_export_vst3!(SaiSampler);
+nih_export_clap!(Malt);
+nih_export_vst3!(Malt);

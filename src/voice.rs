@@ -89,7 +89,7 @@ impl<S: Oscillator> Voice<S> {
         self.phase +=
             ((self.phase >= 1.0) as u8 as f32 * -1.0) + ((self.phase < 0.0) as u8 as f32 * 1.0);
 
-        self.signal.level(self.phase) as f32
+        self.signal.level(self.phase)
     }
 
     pub(crate) fn set_samplerate(&mut self, sr: f32) {

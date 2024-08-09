@@ -1,23 +1,23 @@
 [package]
-name = "sai_sampler"
+name = "malt"
 version = "0.1.0"
 edition = "2021"
-authors = ["James Walker <your@email.com>"]
+authors = ["James Walker <james.chunho@gmail.com>"]
 license = "ISC"
 homepage = "https://youtu.be/dQw4w9WgXcQ"
-description = "An audio sampler"
+description = "A multiband sidechain plugin"
 
 [workspace]
 members = ["xtask"]
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "lib"]
 
 [dependencies]
 arrayvec = "0.7.4"
 # Remove the `assert_process_allocs` feature to allow allocations on the audio
 # thread in debug builds.
-nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs"] }
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs", "standalone"] }
 nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git" }
 once_cell = "1.19.0"
 ringbuffer = "0.15.0"
