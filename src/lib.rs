@@ -50,43 +50,64 @@ impl Default for SaiSampler {
     }
 }
 
+#[derive(Enum, PartialEq, Eq)]
+enum Slope {
+    #[id = "fixed_24"]
+    #[name = "24 dB/octave"]
+    F24,
+    #[id = "fixed_12"]
+    #[name = "12 dB/octave"]
+    F12,
+}
+
 #[derive(Params)]
 struct SaiSamplerParams {
-    #[id = "gain_reduction"]
-    pub gain_reduction: FloatParam,
-    #[id = "precomp"]
-    pub precomp: FloatParam,
-    #[id = "release"]
-    pub release: FloatParam,
-    #[id = "low_crossover"]
-    pub low_crossover: FloatParam,
-    #[id = "high_crossover"]
-    pub high_crossover: FloatParam,
+    #[id = "low_precomp"]
+    pub(crate) low_precomp: FloatParam,
+    #[id = "mid_precomp"]
+    pub(crate) mid_precomp: FloatParam,
+    #[id = "high_precomp"]
+    pub(crate) high_precomp: FloatParam,
+
+    #[id = "low_decay"]
+    pub(crate) low_decay: FloatParam,
+    #[id = "mid_decay"]
+    pub(crate) mid_decay: FloatParam,
+    #[id = "high_decay"]
+    pub(crate) high_decay: FloatParam,
+
+    // gain is scalar, 0.0 -- 1.0
     #[id = "low_gain"]
-    pub low_gain: FloatParam,
+    pub(crate) low_gain: FloatParam,
     #[id = "mid_gain"]
-    pub mid_gain: FloatParam,
+    pub(crate) mid_gain: FloatParam,
     #[id = "high_gain"]
-    pub high_gain: FloatParam,
+    pub(crate) high_gain: FloatParam,
+
+    #[id = "low_crossover"]
+    pub(crate) low_crossover: FloatParam,
+    #[id = "high_crossover"]
+    pub(crate) high_crossover: FloatParam,
+
+    #[id = "crossover_slope"]
+    pub(crate) crossover_slope: EnumParam<Slope>,
+
+    #[id = "smoothing"]
+    pub(crate) smoothing: BoolParam,
+    #[id = "lookahead"]
+    pub(crate) lookahead: FloatParam,
+
+    #[id = "bypass"]
+    pub(crate) bypass: BoolParam,
+    #[id = "mix"]
+    pub(crate) mix: FloatParam,
 }
 
 impl Default for SaiSamplerParams {
     fn default() -> Self {
         Self {
-            gain_reduction: FloatParam::new(
-                "Gain Reduction",
-                db_to_gain(-30.0),
-                FloatRange::Skewed {
-                    min: 0.0,
-                    max: 1.0,
-                    factor: FloatRange::skew_factor(-1.2),
-                },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-            precomp: FloatParam::new(
-                "Precomp",
+            low_precomp: FloatParam::new(
+                "Low precomp",
                 10.0,
                 FloatRange::Linear {
                     min: 0.0,
@@ -95,8 +116,29 @@ impl Default for SaiSamplerParams {
             )
             .with_value_to_string(v2s_f32_ms_then_s(3))
             .with_string_to_value(s2v_f32_ms_then_s()),
-            release: FloatParam::new(
-                "Release",
+            mid_precomp: FloatParam::new(
+                "Mid precomp",
+                10.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 10.0,
+                },
+            )
+            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_string_to_value(s2v_f32_ms_then_s()),
+            high_precomp: FloatParam::new(
+                "High precomp",
+                10.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 10.0,
+                },
+            )
+            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_string_to_value(s2v_f32_ms_then_s()),
+
+            low_decay: FloatParam::new(
+                "Low decay",
                 100.0,
                 // these settings are similar to FabFilter Pro-C's release
                 FloatRange::Skewed {
@@ -107,30 +149,33 @@ impl Default for SaiSamplerParams {
             )
             .with_value_to_string(v2s_f32_ms_then_s(3))
             .with_string_to_value(s2v_f32_ms_then_s()),
-            low_crossover: FloatParam::new(
-                "Low Crossover",
-                120.0,
+            mid_decay: FloatParam::new(
+                "Mid decay",
+                100.0,
+                // these settings are similar to FabFilter Pro-C's release
                 FloatRange::Skewed {
                     min: 10.0,
-                    max: 20000.0,
-                    factor: FloatRange::skew_factor(-2.0),
+                    max: 2500.0,
+                    factor: FloatRange::skew_factor(-1.6),
                 },
             )
-            .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
-            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
-            high_crossover: FloatParam::new(
-                "High Crossover",
-                2500.0,
+            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_string_to_value(s2v_f32_ms_then_s()),
+            high_decay: FloatParam::new(
+                "High decay",
+                100.0,
+                // these settings are similar to FabFilter Pro-C's release
                 FloatRange::Skewed {
                     min: 10.0,
-                    max: 20000.0,
-                    factor: FloatRange::skew_factor(-2.0),
+                    max: 2500.0,
+                    factor: FloatRange::skew_factor(-1.6),
                 },
             )
-            .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
-            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
+            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_string_to_value(s2v_f32_ms_then_s()),
+
             low_gain: FloatParam::new(
-                "Low gain",
+                "Low gain reduction",
                 db_to_gain(0.0),
                 FloatRange::Skewed {
                     min: 0.0,
@@ -142,7 +187,7 @@ impl Default for SaiSamplerParams {
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             mid_gain: FloatParam::new(
-                "Mid gain",
+                "Mid gain reduction",
                 db_to_gain(0.0),
                 FloatRange::Skewed {
                     min: 0.0,
@@ -154,7 +199,7 @@ impl Default for SaiSamplerParams {
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             high_gain: FloatParam::new(
-                "High gain",
+                "High gain reduction",
                 db_to_gain(0.0),
                 FloatRange::Skewed {
                     min: 0.0,
@@ -165,6 +210,50 @@ impl Default for SaiSamplerParams {
             .with_unit(" dB")
             .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+
+            low_crossover: FloatParam::new(
+                "Low crossover",
+                120.0,
+                FloatRange::Skewed {
+                    min: 10.0,
+                    max: 20000.0,
+                    factor: FloatRange::skew_factor(-2.0),
+                },
+            )
+            .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
+            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
+            high_crossover: FloatParam::new(
+                "High crossover",
+                2500.0,
+                FloatRange::Skewed {
+                    min: 10.0,
+                    max: 20000.0,
+                    factor: FloatRange::skew_factor(-2.0),
+                },
+            )
+            .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
+            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
+
+            crossover_slope: EnumParam::new("Crossover slope", Slope::F24),
+            smoothing: BoolParam::new("Smoothing", true),
+            lookahead: FloatParam::new(
+                "Lookahead",
+                10.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 10.0,
+                },
+            ),
+
+            bypass: BoolParam::new("Bypass", false),
+            mix: FloatParam::new(
+                "Mix",
+                100.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 100.0,
+                },
+            ),
         }
     }
 }
@@ -251,12 +340,11 @@ impl Plugin for SaiSampler {
             let mut amplitude = 0.0;
 
             // update params
-            let gain_reduction_db = gain_to_db(self.params.gain_reduction.smoothed.next());
             let low_gain = self.params.low_gain.smoothed.next() as f64;
             let mid_gain = self.params.mid_gain.smoothed.next() as f64;
             let high_gain = self.params.high_gain.smoothed.next() as f64;
-            let precomp = self.params.precomp.smoothed.next() / 1000.0;
-            let release = self.params.release.smoothed.next() / 1000.0;
+            let precomp = self.params.low_precomp.smoothed.next() / 1000.0;
+            let release = self.params.low_decay.smoothed.next() / 1000.0;
             let low_crossover = self.params.low_crossover.smoothed.next();
             // limit high crossover to be 1 octave above low crossover
             // (this is pro-mb's behaviour)
@@ -356,7 +444,7 @@ impl Plugin for SaiSampler {
             };
             env_val = self.env_filter.process_sample(env_val.into()) as f32;
             for sample in channel_samples {
-                *sample = *sample * db_to_gain((env_val as f32) * gain_reduction_db);
+                *sample = *sample * db_to_gain(env_val as f32);
                 amplitude += sample.abs();
                 // *sample = *sample * env_val as f32;
             }
