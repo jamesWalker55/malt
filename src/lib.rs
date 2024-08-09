@@ -7,7 +7,6 @@ mod pattern;
 mod splitter;
 mod svf;
 mod voice;
-mod widgets;
 
 use biquad::{
     ButterworthLP, FirstOrderAP, FirstOrderLP, FixedQFilter, LinkwitzRileyHP, LinkwitzRileyLP,

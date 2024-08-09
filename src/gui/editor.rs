@@ -1,7 +1,5 @@
-use crate::{
-    widgets::{Knob, KnobStyle},
-    SaiSampler,
-};
+use super::knob::{Knob, KnobStyle};
+use crate::SaiSampler;
 use nih_plug::prelude::*;
 use nih_plug_egui::{
     create_egui_editor,
@@ -32,7 +30,7 @@ pub(crate) fn create_gui(
                 // Load font data
                 fonts.font_data.insert(
                     "Inter".into(),
-                    FontData::from_static(include_bytes!("../fonts/Inter-Regular.ttf")),
+                    FontData::from_static(include_bytes!("../../fonts/Inter-Regular.ttf")),
                 );
 
                 // Define font priority
