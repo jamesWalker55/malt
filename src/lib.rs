@@ -130,6 +130,17 @@ impl<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> EnvelopeLane<A
         self.filter = Self::default_filter(self.sr);
     }
 
+    /// Latency shouldn't be automatable.
+    /// For voices that already exist, just leave them as is (with original latency)
+    /// I can't be arsed to implement latency adjustment for envelopes
+    fn set_latency_seconds(&mut self, latency_seconds: f32) {
+        if latency_seconds == self.latency_seconds {
+            return;
+        }
+
+        self.latency_seconds = latency_seconds;
+    }
+
     fn tick(&mut self) -> f32 {
         // collect all envelope values into a single value
         let result = self
@@ -516,6 +527,11 @@ impl Plugin for SaiSampler {
                 self.latency_seconds = new_lookahread;
                 self.latency_samples = (new_lookahread * self.sr).round() as usize;
                 ctx.set_latency_samples(self.latency_samples as u32);
+
+                // update latency for envelopes
+                self.env_low.set_latency_seconds(self.latency_seconds);
+                self.env_mid.set_latency_seconds(self.latency_seconds);
+                self.env_high.set_latency_seconds(self.latency_seconds);
             }
         }
         // handle crossover slope change
