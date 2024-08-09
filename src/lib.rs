@@ -7,7 +7,6 @@ mod pattern;
 mod splitter;
 mod svf;
 mod voice;
-mod widgets;
 
 use biquad::{
     ButterworthLP, FirstOrderAP, FirstOrderLP, FixedQFilter, LinkwitzRileyHP, LinkwitzRileyLP,
@@ -16,7 +15,7 @@ use envelope::EaseInOutSine;
 use envelope::EaseInSine;
 use envelope::Envelope;
 use nih_plug::prelude::*;
-use nih_plug_egui::EguiState;
+use nih_plug_iced::IcedState;
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use splitter::DynamicThreeBand24Slope;
@@ -38,7 +37,7 @@ pub struct SaiSampler {
     /// The editor state, saved together with the parameter state so the custom scaling can be
     /// restored.
     // #[persist = "editor-state"]
-    editor_state: Arc<EguiState>,
+    editor_state: Arc<IcedState>,
     /// The current data for the peak meter. This is stored as an [`Arc`] so we can share it between
     /// the GUI and the audio processing parts. If you have more state to share, then it's a good
     /// idea to put all of that in a struct behind a single `Arc`.
@@ -62,7 +61,7 @@ impl Default for SaiSampler {
             env_filter: FixedQFilter::new(0.0, 0.0),
             // TEMP
             peak_meter: Arc::new(AtomicF32::new(util::MINUS_INFINITY_DB)),
-            editor_state: EguiState::from_size(gui::GUI_WIDTH, gui::GUI_HEIGHT),
+            editor_state: gui::default_state(),
         }
     }
 }
@@ -332,13 +331,13 @@ impl Plugin for SaiSampler {
                 let delayed_sample = *self.buf.get(0).unwrap();
                 // push sample to buffer queue
                 self.buf.push(*sample);
-                // *sample = delayed_sample;
+                *sample = delayed_sample;
 
-                // process delayed sample
-                *sample = self
-                    .splitter_l
-                    .apply_gain(delayed_sample as f64, &[low_gain, mid_gain, high_gain])
-                    as f32;
+                // // process delayed sample
+                // *sample = self
+                //     .splitter_l
+                //     .apply_gain(delayed_sample as f64, &[low_gain, mid_gain, high_gain])
+                //     as f32;
             }
 
             // right channel
@@ -349,13 +348,13 @@ impl Plugin for SaiSampler {
                 let delayed_sample = *self.buf.get(0).unwrap();
                 // push sample to buffer queue
                 self.buf.push(*sample);
-                // *sample = delayed_sample;
+                *sample = delayed_sample;
 
-                // process delayed sample
-                *sample = self
-                    .splitter_r
-                    .apply_gain(delayed_sample as f64, &[low_gain, mid_gain, high_gain])
-                    as f32;
+                // // process delayed sample
+                // *sample = self
+                //     .splitter_r
+                //     .apply_gain(delayed_sample as f64, &[low_gain, mid_gain, high_gain])
+                //     as f32;
             }
 
             // test process envelope
@@ -402,7 +401,11 @@ impl Plugin for SaiSampler {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        gui::create_gui(self, _async_executor)
+        gui::create(
+            self.params.clone(),
+            self.peak_meter.clone(),
+            self.editor_state.clone(),
+        )
     }
 }
 
