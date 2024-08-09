@@ -1,6 +1,8 @@
 //! Pattern module, represents a user-editable pattern thing.
 //! Code based on: https://github.com/tiagolr/gate1
 
+use core::f64::consts as C;
+
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy)]
@@ -70,86 +72,99 @@ impl CurveType {
                 return ((x - xx) / (p2.x - xx)).powf(pwr) * (p2.y - yy) + yy;
             }
             Self::Pulse => {
-                // double t = std::max(std::floor(std::pow(p1.tension,2) * 100), 1.0); // num waves
+                let t = (p1.tension.powi(2) * 100.0).floor().max(1.0); // num waves
 
-                // if (x == p2.x)
-                //   return p2.y;
+                if x == p2.x {
+                    return p2.y;
+                }
 
-                // double cycle_width = (p2.x - p1.x) / t;
-                // double x_in_cycle = mod((x - p1.x), cycle_width);
-                // return x_in_cycle < cycle_width / 2
-                //   ? (p1.tension >= 0 ? p1.y : p2.y)
-                //   : (p1.tension >= 0 ? p2.y : p1.y);
-                todo!()
+                let cycle_width = (p2.x - p1.x) / t;
+                let x_in_cycle = (x - p1.x) % cycle_width;
+
+                if x_in_cycle < cycle_width / 2.0 {
+                    if p1.tension >= 0.0 {
+                        p1.y
+                    } else {
+                        p2.y
+                    }
+                } else {
+                    if p1.tension >= 0.0 {
+                        p2.y
+                    } else {
+                        p1.y
+                    }
+                }
             }
             Self::Wave => {
-                // double t = 2 * std::floor(std::fabs(std::pow(p1.tension,2) * 100) + 1) - 1; // wave num
-                // double amp = (p2.y - p1.y) / 2;
-                // double vshift = p1.y + amp;
-                // double freq = t * 2 * PI / (2 * (p2.x - p1.x));
-                // return -amp * cos(freq * (x - p1.x)) + vshift;
-                todo!()
+                let t = 2.0 * ((p1.tension.powi(2) * 100.0).abs() + 1.0).floor() - 1.0; // wave num
+                let amp = (p2.y - p1.y) / 2.0;
+                let vshift = p1.y + amp;
+                let freq = t * 2.0 * C::PI / (2.0 * (p2.x - p1.x));
+                -amp * (freq * (x - p1.x)).cos() + vshift
             }
             Self::Triangle => {
-                // double tt = 2 * std::floor(std::fabs(std::pow(p1.tension,2) * 100) + 1) - 1.0;// wave num
-                // double amp = p2.y - p1.y;
-                // double t = (p2.x - p1.x) * 2 / tt;
-                // return amp * (2 * std::fabs((x - p1.x) / t - std::floor(1./2. + (x - p1.x) / t))) + p1.y;
-                todo!()
+                let tt = 2.0 * ((p1.tension.powi(2) * 100.0).abs() + 1.0).floor() - 1.0; // wave num
+                let amp = p2.y - p1.y;
+                let t = (p2.x - p1.x) * 2.0 / tt;
+                amp * (2.0 * ((x - p1.x) / t - (1.0 / 2.0 + (x - p1.x) / t).floor()).abs()) + p1.y
             }
             Self::Stairs => {
-                // double t = std::max(std::floor(std::pow(p1.tension,2) * 150), 2.); // num waves
-                // double step_size = 0.;
-                // double step_index = 0.;
-                // double y_step_size = 0.;
+                let t = (p1.tension.powi(2) * 150.0).floor().max(2.0); // num waves
+                let step_size;
+                let step_index;
+                let y_step_size;
 
-                // if (p1.tension >= 0) {
-                //   step_size = (p2.x - p1.x) / t;
-                //   step_index = std::floor((x - p1.x) / step_size);
-                //   y_step_size = (p2.y - p1.y) / (t-1);
-                // }
-                // else {
-                //   step_size = (p2.x - p1.x) / (t-1);
-                //   step_index = ceil((x - p1.x) / step_size);
-                //   y_step_size = (p2.y - p1.y) / t;
-                // }
+                if p1.tension >= 0.0 {
+                    step_size = (p2.x - p1.x) / t;
+                    step_index = ((x - p1.x) / step_size).floor();
+                    y_step_size = (p2.y - p1.y) / (t - 1.0);
+                } else {
+                    step_size = (p2.x - p1.x) / (t - 1.0);
+                    step_index = ((x - p1.x) / step_size).ceil();
+                    y_step_size = (p2.y - p1.y) / t;
+                }
 
-                // if (x == p2.x)
-                //   return p2.y;
+                if x == p2.x {
+                    return p2.y;
+                }
 
-                // return p1.y + step_index * y_step_size;
-                todo!()
+                p1.y + step_index * y_step_size
             }
             Self::SmoothStairs => {
-                // double pwr = 4;
-                // double t = std::max(floor(std::pow(p1.tension,2) * 150), 1.0); // num waves
+                let pwr = 4;
+                let t = (p1.tension.powi(2) * 150.0).floor().max(1.0); // num waves
 
-                // double gx = (p2.x - p1.x) / t; // gridx
-                // double gy = (p2.y - p1.y) / t; // gridy
-                // double step_index = std::floor((x - p1.x) / gx);
+                let gx = (p2.x - p1.x) / t; // gridx
+                let gy = (p2.y - p1.y) / t; // gridy
+                let step_index = ((x - p1.x) / gx).floor();
 
-                // double xx1 = p1.x + gx * step_index;
-                // double xx2 = p1.x + gx * (step_index + 1);
-                // double xx = (xx1 + xx2) / 2;
+                let xx1 = p1.x + gx * step_index;
+                let xx2 = p1.x + gx * (step_index + 1.0);
+                let xx = (xx1 + xx2) / 2.0;
 
-                // double yy1 = p1.y + gy * step_index;
-                // double yy2 = p1.y + gy * (step_index + 1);
-                // double yy = (yy1 + yy2) / 2;
+                let yy1 = p1.y + gy * step_index;
+                let yy2 = p1.y + gy * (step_index + 1.0);
+                let yy = (yy1 + yy2) / 2.0;
 
-                // if (p1.x == p2.x)
-                //   return p2.y;
+                if p1.x == p2.x {
+                    return p2.y;
+                }
 
-                // if (x < xx && p1.tension >= 0)
-                //   return std::pow((x - xx1) / (xx - xx1), pwr) * (yy - yy1) + yy1;
+                if x < xx && p1.tension >= 0.0 {
+                    return ((x - xx1) / (xx - xx1)).powi(pwr) * (yy - yy1) + yy1;
+                }
 
-                // if (x < xx && p1.tension < 0)
-                //   return -1 * (std::pow(1 - (x - xx1) / (xx - xx1), pwr) - 1) * (yy - yy1) + yy1;
+                if x < xx && p1.tension < 0.0 {
+                    return -1.0 * ((1.0 - (x - xx1) / (xx - xx1)).powi(pwr) - 1.0) * (yy - yy1)
+                        + yy1;
+                }
 
-                // if (x >= xx && p1.tension >= 0)
-                //   return -1 * (std::pow(1 - (x - xx) / (xx2 - xx), pwr) - 1) * (yy2 - yy) + yy;
+                if x >= xx && p1.tension >= 0.0 {
+                    return -1.0 * ((1.0 - (x - xx) / (xx2 - xx)).powi(pwr) - 1.0) * (yy2 - yy)
+                        + yy;
+                }
 
-                // return std::pow((x - xx) / (xx2 - xx), pwr) * (yy2 - yy) + yy;
-                todo!()
+                return ((x - xx) / (xx2 - xx)).powi(pwr) * (yy2 - yy) + yy;
             }
         }
     }
