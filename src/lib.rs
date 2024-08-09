@@ -7,9 +7,7 @@ mod splitter;
 mod svf;
 mod voice;
 
-use biquad::{
-    ButterworthLP, FirstOrderAP, FirstOrderLP, FixedQFilter, LinkwitzRileyHP, LinkwitzRileyLP,
-};
+use biquad::{FirstOrderLP, FixedQFilter};
 use envelope::EaseInOutSine;
 use envelope::EaseInSine;
 use envelope::Envelope;
