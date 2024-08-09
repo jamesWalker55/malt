@@ -597,7 +597,7 @@ impl Plugin for SaiSampler {
                 }
 
                 match event {
-                    NoteEvent::NoteOn { note, .. } => {
+                    NoteEvent::NoteOn { .. } => {
                         self.env_low
                             .add(low_precomp, low_decay, EaseInSine, EaseInOutSine);
                         self.env_mid
