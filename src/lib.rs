@@ -16,7 +16,6 @@ use envelope::Envelope;
 use nih_plug::prelude::*;
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
-use splitter::DynamicThreeBand24Slope;
 use splitter::MinimumThreeBand12Slope;
 use splitter::MinimumThreeBand24Slope;
 use std::sync::Arc;
@@ -406,14 +405,9 @@ impl Default for SaiSamplerParams {
             .with_string_to_value(s2v_f32_ms_then_s()),
 
             bypass: BoolParam::new("Bypass", false),
-            mix: FloatParam::new(
-                "Mix",
-                100.0,
-                FloatRange::Linear {
-                    min: 0.0,
-                    max: 100.0,
-                },
-            ),
+            mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_percentage(3))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
         }
     }
 }
@@ -623,7 +617,7 @@ impl Plugin for SaiSampler {
 
             #[inline(always)]
             fn calculate_final_gain(env_val: f64, max_gain_db: f64, mix: f64) -> f32 {
-                db_to_gain(-(max_gain_db * (1.0 - env_val) * mix) as f32)
+                db_to_gain(-(max_gain_db * env_val * mix) as f32)
             }
 
             // tick envelopes and get gain value
