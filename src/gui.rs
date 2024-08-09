@@ -181,6 +181,14 @@ pub(crate) fn create_gui(
                         },
                     );
                     ui.add(knob);
+
+                    let knob = Knob::for_param(
+                        &params.release,
+                        setter,
+                        15.0,
+                        KnobStyle::Donut { line_width: 4.0 },
+                    );
+                    ui.add(knob);
                 });
 
             // left-side analyser (variable size)

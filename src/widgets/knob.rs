@@ -18,7 +18,9 @@ pub(crate) enum KnobStyle {
         highlight_color: Color32,
         line_width: f32,
     },
-    Donut,
+    Donut {
+        line_width: f32,
+    },
 }
 
 pub(crate) struct Knob<'a, P: Param> {
@@ -243,7 +245,54 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
                     }
                 });
             }
-            KnobStyle::Donut => todo!(),
+            KnobStyle::Donut { line_width } => {
+                ui.vertical(|ui| {
+                    let painter = ui.painter_at(response.rect);
+                    let center = response.rect.center();
+
+                    // since we will draw a stroke, we need to account for the line's width
+                    // outline radius should be: size / 2.0 - line_width / 2.0
+                    // this formula is the same, simplified:
+                    let line_radius = (self.size - line_width) / 2.0;
+
+                    // Draw the inactive arc behind the highlight line
+                    {
+                        let shape = Shape::Path(PathShape {
+                            points: get_arc_points(
+                                1.0,
+                                Self::ARC_START,
+                                Self::ARC_END,
+                                center,
+                                line_radius,
+                                0.2,
+                            ),
+                            closed: false,
+                            fill: Color32::TRANSPARENT,
+                            stroke: Stroke::new(*line_width, Self::BG_COLOR),
+                        });
+                        painter.add(shape);
+                    }
+
+                    // Draw the highlight line
+                    {
+                        let shape = Shape::Path(PathShape {
+                            points: get_arc_points(
+                                value,
+                                Self::ARC_START,
+                                Self::ARC_END,
+                                center,
+                                line_radius,
+                                0.2,
+                            ),
+                            closed: false,
+                            fill: Color32::TRANSPARENT,
+                            // improve rendering by making outline overlap with knob center a bit
+                            stroke: Stroke::new(*line_width, Self::LINE_COLOR),
+                        });
+                        painter.add(shape);
+                    }
+                });
+            }
         }
 
         response
