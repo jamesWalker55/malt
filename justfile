@@ -1,5 +1,7 @@
 build:
-    cargo xtask bundle sai_sampler
+    # only build VST3 and CLAP with `--lib`
+    cargo xtask bundle sai_sampler --lib
 
 release:
-    cargo xtask bundle sai_sampler --release
+    # only build VST3 and CLAP with `--lib`
+    cargo xtask bundle sai_sampler --lib --release

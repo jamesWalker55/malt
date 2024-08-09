@@ -7,6 +7,7 @@ mod pattern;
 mod splitter;
 mod svf;
 mod voice;
+mod widgets;
 
 use biquad::{
     ButterworthLP, FirstOrderAP, FirstOrderLP, FixedQFilter, LinkwitzRileyHP, LinkwitzRileyLP,
@@ -14,8 +15,8 @@ use biquad::{
 use envelope::EaseInOutSine;
 use envelope::EaseInSine;
 use envelope::Envelope;
-use nih_plug::{buffer::ChannelSamples, prelude::*};
-use nih_plug_egui::{create_egui_editor, egui, widgets, EguiState};
+use nih_plug::prelude::*;
+use nih_plug_egui::EguiState;
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use splitter::DynamicThreeBand24Slope;
@@ -61,7 +62,7 @@ impl Default for SaiSampler {
             env_filter: FixedQFilter::new(0.0, 0.0),
             // TEMP
             peak_meter: Arc::new(AtomicF32::new(util::MINUS_INFINITY_DB)),
-            editor_state: EguiState::from_size(300, 400),
+            editor_state: EguiState::from_size(gui::GUI_WIDTH, gui::GUI_HEIGHT),
         }
     }
 }
