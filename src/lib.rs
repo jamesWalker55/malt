@@ -274,7 +274,7 @@ impl Default for SaiSamplerParams {
                 10.0,
                 FloatRange::Linear {
                     min: 0.0,
-                    max: MAX_LATENCY_SECONDS,
+                    max: MAX_LATENCY_SECONDS * 1000.0,
                 },
             )
             .with_value_to_string(v2s_f32_ms_then_s(3))
@@ -284,7 +284,7 @@ impl Default for SaiSamplerParams {
                 10.0,
                 FloatRange::Linear {
                     min: 0.0,
-                    max: MAX_LATENCY_SECONDS,
+                    max: MAX_LATENCY_SECONDS * 1000.0,
                 },
             )
             .with_value_to_string(v2s_f32_ms_then_s(3))
@@ -294,7 +294,7 @@ impl Default for SaiSamplerParams {
                 10.0,
                 FloatRange::Linear {
                     min: 0.0,
-                    max: MAX_LATENCY_SECONDS,
+                    max: MAX_LATENCY_SECONDS * 1000.0,
                 },
             )
             .with_value_to_string(v2s_f32_ms_then_s(3))
@@ -404,7 +404,7 @@ impl Default for SaiSamplerParams {
                 10.0,
                 FloatRange::Linear {
                     min: 0.0,
-                    max: MAX_LATENCY_SECONDS,
+                    max: MAX_LATENCY_SECONDS * 1000.0,
                 },
             )
             .with_value_to_string(v2s_f32_ms_then_s(3))
