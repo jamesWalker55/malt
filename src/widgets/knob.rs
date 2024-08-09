@@ -10,8 +10,8 @@ use std::{
 
 /// When shift+dragging a parameter, one pixel dragged corresponds to this much change in the
 /// noramlized parameter.
-const GRANULAR_DRAG_MULTIPLIER: f32 = 0.001;
-const NORMAL_DRAG_MULTIPLIER: f32 = 0.005;
+const GRANULAR_DRAG_MULTIPLIER: f32 = 0.0005;
+const NORMAL_DRAG_MULTIPLIER: f32 = 0.002;
 
 pub(crate) struct Knob<'a, P: Param> {
     size: f32,
@@ -140,12 +140,14 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
                         Self::ARC_START,
                         Self::ARC_END,
                         center,
-                        outline_radius,
+                        // improve rendering by making outline overlap with knob center a bit
+                        outline_radius - 1.0,
                         0.2,
                     ),
                     closed: false,
                     fill: Color32::TRANSPARENT,
-                    stroke: Stroke::new(self.line_width, Self::BG_COLOR),
+                    // improve rendering by making outline overlap with knob center a bit
+                    stroke: Stroke::new(self.line_width + 2.0, Self::BG_COLOR),
                 });
                 painter.add(shape);
             }
@@ -158,12 +160,14 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
                         Self::ARC_START,
                         Self::ARC_END,
                         center,
-                        outline_radius,
+                        // improve rendering by making outline overlap with knob center a bit
+                        outline_radius - 1.0,
                         0.2,
                     ),
                     closed: false,
                     fill: Color32::TRANSPARENT,
-                    stroke: Stroke::new(self.line_width, self.highlight_color),
+                    // improve rendering by making outline overlap with knob center a bit
+                    stroke: Stroke::new(self.line_width + 2.0, self.highlight_color),
                 });
                 painter.add(shape);
             }
@@ -182,9 +186,10 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
             // Draw the knob marker line
             {
                 // make the marker line begin off-center
-                let inner_radius = center_radius * 0.35;
+                let inner_radius = self.line_width;
                 // make the marker line terminate just before it reaches the highlight ring
-                let outer_radius = outline_radius - self.line_width;
+                // also add 0.25 pixel to make it look nicer
+                let outer_radius = outline_radius - self.line_width + 0.25;
 
                 // find start and end point
                 let angle = lerp(Self::ARC_START, Self::ARC_END, value);
