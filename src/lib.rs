@@ -17,6 +17,7 @@ use nih_plug::prelude::*;
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use splitter::DynamicThreeBand24Slope;
+use splitter::MinimumThreeBand12Slope;
 use splitter::MinimumThreeBand24Slope;
 use std::sync::Arc;
 use util::{db_to_gain, gain_to_db};
@@ -51,7 +52,7 @@ impl MultibandGainApplier {
 }
 
 struct EnvelopeLane<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> {
-    sr: f32,
+    sr: f64,
     latency_seconds: f32,
     voices: [Option<Envelope<A, R>>; VOICES],
     filter: FixedQFilter<FirstOrderLP>,
@@ -61,19 +62,23 @@ struct EnvelopeLane<A: envelope::Curve, R: envelope::Curve, const VOICES: usize>
 impl<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> EnvelopeLane<A, R, VOICES> {
     const EMPTY_VOICE: Option<Envelope<A, R>> = None;
 
+    fn default_filter(sr: f64) -> FixedQFilter<FirstOrderLP> {
+        FixedQFilter::new(1000.0, sr)
+    }
+
     fn new(sr: f64, latency_seconds: f32, smooth: bool) -> Self {
         Self {
-            sr: sr as f32,
+            sr,
             latency_seconds,
             voices: [Self::EMPTY_VOICE; VOICES],
-            filter: FixedQFilter::new(1000.0, sr),
+            filter: Self::default_filter(sr),
             smooth,
         }
     }
 
     fn add(&mut self, precomp: f32, decay: f32, attack_curve: A, release_curve: R) {
         let env = Envelope::new(
-            self.sr,
+            self.sr as f32,
             self.latency_seconds - precomp,
             precomp,
             decay,
@@ -115,6 +120,16 @@ impl<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> EnvelopeLane<A
 
             voice.set_release(release);
         }
+    }
+
+    fn set_smooth(&mut self, smooth: bool) {
+        if smooth == self.smooth {
+            return;
+        }
+
+        self.smooth = smooth;
+        // reset filter to avoid pops and clicks
+        self.filter = Self::default_filter(self.sr);
     }
 
     fn tick(&mut self) -> f32 {
@@ -161,6 +176,7 @@ pub struct SaiSampler {
     sr: f32,
     latency_seconds: f32,
     latency_samples: u32,
+    current_slope: Slope,
     splitter_l: MultibandGainApplier,
     splitter_r: MultibandGainApplier,
     env_low: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
@@ -177,6 +193,7 @@ impl Default for SaiSampler {
             sr: 0.0,
             latency_seconds: 0.0,
             latency_samples: 0,
+            current_slope: Slope::F24,
             splitter_l: MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
                 0.0, 0.0, 0.0,
             )),
@@ -454,6 +471,7 @@ impl Plugin for SaiSampler {
 
     fn reset(&mut self) {
         // setup filters
+        self.current_slope = self.params.crossover_slope.value();
         self.splitter_l = MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
             1000.0,
             2000.0,
@@ -499,6 +517,41 @@ impl Plugin for SaiSampler {
                 ctx.set_latency_samples(self.latency_samples);
             }
         }
+        // handle crossover slope change
+        {
+            let new_slope = self.params.crossover_slope.value();
+            if new_slope != self.current_slope {
+                // replace splitters with new slopes
+                self.current_slope = new_slope;
+                match self.current_slope {
+                    Slope::F24 => {
+                        self.splitter_l = MultibandGainApplier::ThreeBand24(
+                            MinimumThreeBand24Slope::new(1000.0, 2000.0, self.sr.into()),
+                        );
+                        self.splitter_r = MultibandGainApplier::ThreeBand24(
+                            MinimumThreeBand24Slope::new(1000.0, 2000.0, self.sr.into()),
+                        );
+                    }
+                    Slope::F12 => {
+                        self.splitter_l = MultibandGainApplier::ThreeBand12(
+                            MinimumThreeBand12Slope::new(1000.0, 2000.0, self.sr.into()),
+                        );
+                        self.splitter_r = MultibandGainApplier::ThreeBand12(
+                            MinimumThreeBand12Slope::new(1000.0, 2000.0, self.sr.into()),
+                        );
+                    }
+                }
+            }
+        }
+        // handle smoothing change
+        {
+            let smoothing = self.params.smoothing.value();
+            self.env_low.set_smooth(smoothing);
+            self.env_mid.set_smooth(smoothing);
+            self.env_high.set_smooth(smoothing);
+        }
+
+        let bypass = self.params.bypass.value();
 
         let mut next_event = ctx.next_event();
 
@@ -519,9 +572,9 @@ impl Plugin for SaiSampler {
             let low_decay = self.params.low_decay.smoothed.next() / 1000.0;
             let mid_decay = self.params.mid_decay.smoothed.next() / 1000.0;
             let high_decay = self.params.high_decay.smoothed.next() / 1000.0;
-            let low_gain = self.params.low_gain.smoothed.next() as f64;
-            let mid_gain = self.params.mid_gain.smoothed.next() as f64;
-            let high_gain = self.params.high_gain.smoothed.next() as f64;
+            let low_max_gain_db = -gain_to_db(self.params.low_gain.smoothed.next());
+            let mid_max_gain_db = -gain_to_db(self.params.mid_gain.smoothed.next());
+            let high_max_gain_db = -gain_to_db(self.params.high_gain.smoothed.next());
             let low_crossover = {
                 let value = self.params.low_crossover.smoothed.next();
                 // since high crossover will be 1 octave above this, this cannot be too high
@@ -534,10 +587,6 @@ impl Plugin for SaiSampler {
                 let min_value = low_crossover * 2.0;
                 value.max(min_value)
             };
-            let crossover_slope = self.params.crossover_slope.value();
-            let smoothing = self.params.smoothing.value();
-            let lookahead = self.params.lookahead.smoothed.next();
-            let bypass = self.params.bypass.value();
             let mix = self.params.mix.smoothed.next();
 
             // handle MIDI events
@@ -572,6 +621,37 @@ impl Plugin for SaiSampler {
             self.splitter_r
                 .set_frequencies(low_crossover.into(), high_crossover.into());
 
+            #[inline(always)]
+            fn calculate_final_gain(env_val: f64, max_gain_db: f64, mix: f64) -> f32 {
+                db_to_gain(-(max_gain_db * (1.0 - env_val) * mix) as f32)
+            }
+
+            // tick envelopes and get gain value
+            let low_gain;
+            let mid_gain;
+            let high_gain;
+            if bypass {
+                low_gain = 1.0;
+                mid_gain = 1.0;
+                high_gain = 1.0;
+            } else {
+                low_gain = calculate_final_gain(
+                    self.env_low.tick() as f64,
+                    low_max_gain_db as f64,
+                    mix as f64,
+                ) as f64;
+                mid_gain = calculate_final_gain(
+                    self.env_mid.tick() as f64,
+                    mid_max_gain_db as f64,
+                    mix as f64,
+                ) as f64;
+                high_gain = calculate_final_gain(
+                    self.env_high.tick() as f64,
+                    high_max_gain_db as f64,
+                    mix as f64,
+                ) as f64;
+            }
+
             // left channel
             {
                 let sample = channel_samples.get_mut(0).unwrap();
@@ -604,13 +684,6 @@ impl Plugin for SaiSampler {
                     .splitter_r
                     .apply_gain(delayed_sample as f64, &[low_gain, mid_gain, high_gain])
                     as f32;
-            }
-
-            // test process envelope
-            let env_val = self.env_low.tick();
-            for sample in channel_samples {
-                *sample = *sample * env_val;
-                // *sample = *sample * env_val as f32;
             }
         }
 
