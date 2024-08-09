@@ -1,4 +1,4 @@
-use crate::{widgets::ArcKnob, SaiSampler};
+use crate::{widgets::Knob, SaiSampler};
 use nih_plug::prelude::*;
 use nih_plug_egui::{
     create_egui_editor,
@@ -157,7 +157,7 @@ pub(crate) fn create_gui(
                     let band_height = (rect.height() - 2.0) / 3.0;
                     ui.label(format!("band_height: {:?}", band_height));
 
-                    let audio_module_3_knob = ArcKnob::for_param(
+                    let audio_module_3_knob = Knob::for_param(
                         &params.gain_reduction,
                         setter,
                         34.0,
