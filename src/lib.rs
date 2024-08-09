@@ -23,6 +23,7 @@ use util::{db_to_gain, gain_to_db};
 
 const CROSSOVER_MIN_HZ: f32 = 10.0;
 const CROSSOVER_MAX_HZ: f32 = 20000.0;
+const MAX_LATENCY_SECONDS: f32 = 0.01;
 
 enum MultibandGainApplier {
     ThreeBand24(splitter::MinimumThreeBand24Slope),
@@ -174,14 +175,16 @@ pub struct SaiSampler {
     params: Arc<SaiSamplerParams>,
     sr: f32,
     latency_seconds: f32,
-    latency_samples: u32,
+    latency_samples: usize,
+    max_latency_samples: usize,
     current_slope: Slope,
     splitter_l: MultibandGainApplier,
     splitter_r: MultibandGainApplier,
     env_low: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
     env_mid: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
     env_high: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
-    latency_buf: AllocRingBuffer<f32>,
+    latency_buf_l: AllocRingBuffer<f32>,
+    latency_buf_r: AllocRingBuffer<f32>,
 }
 
 impl Default for SaiSampler {
@@ -192,6 +195,7 @@ impl Default for SaiSampler {
             sr: 0.0,
             latency_seconds: 0.0,
             latency_samples: 0,
+            max_latency_samples: 0,
             current_slope: Slope::F24,
             splitter_l: MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
                 0.0, 0.0, 0.0,
@@ -199,7 +203,8 @@ impl Default for SaiSampler {
             splitter_r: MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
                 0.0, 0.0, 0.0,
             )),
-            latency_buf: AllocRingBuffer::new(1),
+            latency_buf_l: AllocRingBuffer::new(1),
+            latency_buf_r: AllocRingBuffer::new(1),
             env_low: EnvelopeLane::new(0.0, 0.0, false),
             env_mid: EnvelopeLane::new(0.0, 0.0, false),
             env_high: EnvelopeLane::new(0.0, 0.0, false),
@@ -268,7 +273,7 @@ impl Default for SaiSamplerParams {
                 10.0,
                 FloatRange::Linear {
                     min: 0.0,
-                    max: 10.0,
+                    max: MAX_LATENCY_SECONDS,
                 },
             )
             .with_value_to_string(v2s_f32_ms_then_s(3))
@@ -278,7 +283,7 @@ impl Default for SaiSamplerParams {
                 10.0,
                 FloatRange::Linear {
                     min: 0.0,
-                    max: 10.0,
+                    max: MAX_LATENCY_SECONDS,
                 },
             )
             .with_value_to_string(v2s_f32_ms_then_s(3))
@@ -288,7 +293,7 @@ impl Default for SaiSamplerParams {
                 10.0,
                 FloatRange::Linear {
                     min: 0.0,
-                    max: 10.0,
+                    max: MAX_LATENCY_SECONDS,
                 },
             )
             .with_value_to_string(v2s_f32_ms_then_s(3))
@@ -398,7 +403,7 @@ impl Default for SaiSamplerParams {
                 10.0,
                 FloatRange::Linear {
                     min: 0.0,
-                    max: 10.0,
+                    max: MAX_LATENCY_SECONDS,
                 },
             )
             .with_value_to_string(v2s_f32_ms_then_s(3))
@@ -451,14 +456,13 @@ impl Plugin for SaiSampler {
         self.sr = _buffer_config.sample_rate;
 
         // report latency
-        const MAX_LATENCY_SECONDS: f32 = 0.01;
-        let max_latency_samples = (MAX_LATENCY_SECONDS * self.sr).round() as usize;
-        self.latency_buf = {
-            // times 2 for 2 channels
-            let mut buf = AllocRingBuffer::new(max_latency_samples * 2);
+        self.max_latency_samples = (MAX_LATENCY_SECONDS * self.sr).round() as usize;
+        self.latency_buf_l = {
+            let mut buf = AllocRingBuffer::new(self.max_latency_samples);
             buf.fill(0.0);
             buf
         };
+        self.latency_buf_r = self.latency_buf_l.clone();
 
         true
     }
@@ -507,8 +511,8 @@ impl Plugin for SaiSampler {
             let new_lookahread = self.params.lookahead.value() / 1000.0;
             if new_lookahread != self.latency_seconds {
                 self.latency_seconds = new_lookahread;
-                self.latency_samples = (new_lookahread * self.sr).round() as u32;
-                ctx.set_latency_samples(self.latency_samples);
+                self.latency_samples = (new_lookahread * self.sr).round() as usize;
+                ctx.set_latency_samples(self.latency_samples as u32);
             }
         }
         // handle crossover slope change
@@ -648,14 +652,16 @@ impl Plugin for SaiSampler {
                 bypass,
             ) as f64;
 
+            let latency_buf_offset = self.max_latency_samples - self.latency_samples;
+
             // left channel
             {
                 let sample = channel_samples.get_mut(0).unwrap();
 
                 // the sample from eons ago (the latency)
-                let delayed_sample = *self.latency_buf.get(0).unwrap();
+                let delayed_sample = *self.latency_buf_l.get(latency_buf_offset).unwrap();
                 // push sample to buffer queue
-                self.latency_buf.push(*sample);
+                self.latency_buf_l.push(*sample);
                 // *sample = delayed_sample;
 
                 // process delayed sample
@@ -670,9 +676,9 @@ impl Plugin for SaiSampler {
                 let sample = channel_samples.get_mut(1).unwrap();
 
                 // the sample from eons ago (the latency)
-                let delayed_sample = *self.latency_buf.get(0).unwrap();
+                let delayed_sample = *self.latency_buf_r.get(latency_buf_offset).unwrap();
                 // push sample to buffer queue
-                self.latency_buf.push(*sample);
+                self.latency_buf_r.push(*sample);
                 // *sample = delayed_sample;
 
                 // process delayed sample
