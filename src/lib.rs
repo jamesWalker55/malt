@@ -333,7 +333,7 @@ impl Default for SaiSamplerParams {
 
             low_gain: FloatParam::new(
                 "Low gain reduction",
-                db_to_gain(0.0),
+                db_to_gain(-30.0),
                 FloatRange::Skewed {
                     min: 0.0,
                     max: 1.0,
@@ -345,7 +345,7 @@ impl Default for SaiSamplerParams {
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             mid_gain: FloatParam::new(
                 "Mid gain reduction",
-                db_to_gain(0.0),
+                db_to_gain(-30.0),
                 FloatRange::Skewed {
                     min: 0.0,
                     max: 1.0,
@@ -357,7 +357,7 @@ impl Default for SaiSamplerParams {
             .with_string_to_value(formatters::s2v_f32_gain_to_db()),
             high_gain: FloatParam::new(
                 "High gain reduction",
-                db_to_gain(0.0),
+                db_to_gain(-30.0),
                 FloatRange::Skewed {
                     min: 0.0,
                     max: 1.0,
