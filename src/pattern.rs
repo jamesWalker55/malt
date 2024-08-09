@@ -240,7 +240,7 @@ impl Pattern {
 
         // validate first point, must be at start
         let first_point = points.remove(0);
-        if last_point.x != 0.0 {
+        if first_point.x != 0.0 {
             return None;
         }
 
