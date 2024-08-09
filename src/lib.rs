@@ -21,14 +21,42 @@ use splitter::MinimumThreeBand24Slope;
 use std::sync::Arc;
 use util::{db_to_gain, gain_to_db};
 
+const CROSSOVER_MIN_HZ: f32 = 10.0;
+const CROSSOVER_MAX_HZ: f32 = 20000.0;
+
+enum MultibandGainApplier {
+    ThreeBand24(splitter::MinimumThreeBand24Slope),
+    ThreeBand12(splitter::MinimumThreeBand12Slope),
+}
+
+impl MultibandGainApplier {
+    fn apply_gain(&mut self, sample: f64, gains: &[f64; 3]) -> f64 {
+        match self {
+            MultibandGainApplier::ThreeBand24(splitter) => splitter.apply_gain(sample, gains),
+            MultibandGainApplier::ThreeBand12(splitter) => splitter.apply_gain(sample, gains),
+        }
+    }
+
+    pub(crate) fn set_frequencies(&mut self, f1: f64, f2: f64) {
+        match self {
+            MultibandGainApplier::ThreeBand24(splitter) => {
+                splitter.set_frequencies(f1, f2);
+            }
+            MultibandGainApplier::ThreeBand12(splitter) => {
+                splitter.set_frequencies(f1, f2);
+            }
+        }
+    }
+}
+
 pub struct SaiSampler {
     params: Arc<SaiSamplerParams>,
     sr: f32,
     latency_seconds: f32,
     latency_samples: u32,
-    splitter_l: DynamicThreeBand24Slope,
-    splitter_r: MinimumThreeBand24Slope,
-    buf: AllocRingBuffer<f32>,
+    splitter_l: MultibandGainApplier,
+    splitter_r: MultibandGainApplier,
+    latency_buf: AllocRingBuffer<f32>,
     env: Option<Envelope<EaseInSine, EaseInOutSine>>,
     env_filter: FixedQFilter<FirstOrderLP>,
 }
@@ -41,9 +69,13 @@ impl Default for SaiSampler {
             sr: 0.0,
             latency_seconds: 0.0,
             latency_samples: 0,
-            splitter_l: DynamicThreeBand24Slope::new(0.0, 0.0, 0.0),
-            splitter_r: MinimumThreeBand24Slope::new(0.0, 0.0, 0.0),
-            buf: AllocRingBuffer::new(1),
+            splitter_l: MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
+                0.0, 0.0, 0.0,
+            )),
+            splitter_r: MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
+                0.0, 0.0, 0.0,
+            )),
+            latency_buf: AllocRingBuffer::new(1),
             env: None,
             env_filter: FixedQFilter::new(0.0, 0.0),
         }
@@ -215,8 +247,8 @@ impl Default for SaiSamplerParams {
                 "Low crossover",
                 120.0,
                 FloatRange::Skewed {
-                    min: 10.0,
-                    max: 20000.0,
+                    min: CROSSOVER_MIN_HZ,
+                    max: CROSSOVER_MAX_HZ,
                     factor: FloatRange::skew_factor(-2.0),
                 },
             )
@@ -226,8 +258,8 @@ impl Default for SaiSamplerParams {
                 "High crossover",
                 2500.0,
                 FloatRange::Skewed {
-                    min: 10.0,
-                    max: 20000.0,
+                    min: CROSSOVER_MIN_HZ,
+                    max: CROSSOVER_MAX_HZ,
                     factor: FloatRange::skew_factor(-2.0),
                 },
             )
@@ -243,7 +275,9 @@ impl Default for SaiSamplerParams {
                     min: 0.0,
                     max: 10.0,
                 },
-            ),
+            )
+            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_string_to_value(s2v_f32_ms_then_s()),
 
             bypass: BoolParam::new("Bypass", false),
             mix: FloatParam::new(
@@ -297,21 +331,30 @@ impl Plugin for SaiSampler {
         self.sr = _buffer_config.sample_rate;
 
         // report latency
-        const LATENCY_SECONDS: f32 = 0.01;
-        self.latency_seconds = LATENCY_SECONDS;
-        self.latency_samples = (LATENCY_SECONDS * self.sr).round() as u32;
-        _context.set_latency_samples(self.latency_samples);
-
-        // times 2 for 2 channels
-        self.buf = {
-            let mut buf = AllocRingBuffer::new((self.latency_samples * 2).try_into().unwrap());
+        const MAX_LATENCY_SECONDS: f32 = 0.01;
+        let max_latency_samples = (MAX_LATENCY_SECONDS * self.sr).round() as usize;
+        self.latency_buf = {
+            // times 2 for 2 channels
+            let mut buf = AllocRingBuffer::new(max_latency_samples * 2);
             buf.fill(0.0);
             buf
         };
 
+        true
+    }
+
+    fn reset(&mut self) {
         // setup filters
-        self.splitter_l = DynamicThreeBand24Slope::new(1000.0, 2000.0, self.sr.into());
-        self.splitter_r = MinimumThreeBand24Slope::new(1000.0, 2000.0, self.sr.into());
+        self.splitter_l = MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
+            1000.0,
+            2000.0,
+            self.sr.into(),
+        ));
+        self.splitter_r = MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
+            1000.0,
+            2000.0,
+            self.sr.into(),
+        ));
 
         // clear envelope
         self.env = None;
@@ -319,11 +362,7 @@ impl Plugin for SaiSampler {
         // at 600Hz it settles in about 2ms
         // switch to 1000Hz to settle in about 1ms
         self.env_filter = FixedQFilter::new(1000.0, self.sr.into());
-
-        true
     }
-
-    fn reset(&mut self) {}
 
     fn process(
         &mut self,
@@ -332,28 +371,55 @@ impl Plugin for SaiSampler {
         ctx: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         debug_assert_eq!(buffer.channels(), 2);
+        // handle if latency has changed
+        {
+            let new_lookahread = self.params.lookahead.value() / 1000.0;
+            if new_lookahread != self.latency_seconds {
+                self.latency_seconds = new_lookahread;
+                self.latency_samples = (new_lookahread * self.sr).round() as u32;
+                ctx.set_latency_samples(self.latency_samples);
+            }
+        }
 
         let mut next_event = ctx.next_event();
 
         for (sample_id, mut channel_samples) in buffer.iter_samples().enumerate() {
             // update params
+            let low_precomp = {
+                let value = self.params.low_precomp.smoothed.next() / 1000.0;
+                value.min(self.latency_seconds)
+            };
+            let mid_precomp = {
+                let value = self.params.mid_precomp.smoothed.next() / 1000.0;
+                value.min(self.latency_seconds)
+            };
+            let high_precomp = {
+                let value = self.params.high_precomp.smoothed.next() / 1000.0;
+                value.min(self.latency_seconds)
+            };
+            let low_decay = self.params.low_decay.smoothed.next() / 1000.0;
+            let mid_decay = self.params.mid_decay.smoothed.next() / 1000.0;
+            let high_decay = self.params.high_decay.smoothed.next() / 1000.0;
             let low_gain = self.params.low_gain.smoothed.next() as f64;
             let mid_gain = self.params.mid_gain.smoothed.next() as f64;
             let high_gain = self.params.high_gain.smoothed.next() as f64;
-            let precomp = self.params.low_precomp.smoothed.next() / 1000.0;
-            let release = self.params.low_decay.smoothed.next() / 1000.0;
-            let low_crossover = self.params.low_crossover.smoothed.next();
-            // limit high crossover to be 1 octave above low crossover
-            // (this is pro-mb's behaviour)
-            let min_high_crossover = low_crossover * 2.0;
-            let high_crossover = self
-                .params
-                .high_crossover
-                .smoothed
-                .next()
-                .max(min_high_crossover);
-
-            debug_assert!(precomp <= self.latency_seconds);
+            let low_crossover = {
+                let value = self.params.low_crossover.smoothed.next();
+                // since high crossover will be 1 octave above this, this cannot be too high
+                value.min(CROSSOVER_MAX_HZ / 2.0)
+            };
+            let high_crossover = {
+                // limit high crossover to be 1 octave above low crossover
+                // (this is pro-mb's behaviour)
+                let value = self.params.high_crossover.smoothed.next();
+                let min_value = low_crossover * 2.0;
+                value.max(min_value)
+            };
+            let crossover_slope = self.params.crossover_slope.value();
+            let smoothing = self.params.smoothing.value();
+            let lookahead = self.params.lookahead.smoothed.next();
+            let bypass = self.params.bypass.value();
+            let mix = self.params.mix.smoothed.next();
 
             // handle MIDI events
             while let Some(event) = next_event {
@@ -365,9 +431,9 @@ impl Plugin for SaiSampler {
                     NoteEvent::NoteOn { note, .. } => {
                         self.env = Some(Envelope::new(
                             self.sr,
-                            self.latency_seconds - precomp,
-                            precomp,
-                            release,
+                            self.latency_seconds - low_precomp,
+                            low_precomp,
+                            low_decay,
                             EaseInSine,
                             EaseInOutSine,
                         ));
@@ -383,7 +449,7 @@ impl Plugin for SaiSampler {
 
             // update existing envelopes (if any)
             if let Some(env) = &mut self.env {
-                env.set_release(release);
+                env.set_release(low_decay);
             }
 
             // update filter frequency
@@ -397,9 +463,9 @@ impl Plugin for SaiSampler {
                 let sample = channel_samples.get_mut(0).unwrap();
 
                 // the sample from eons ago (the latency)
-                let delayed_sample = *self.buf.get(0).unwrap();
+                let delayed_sample = *self.latency_buf.get(0).unwrap();
                 // push sample to buffer queue
-                self.buf.push(*sample);
+                self.latency_buf.push(*sample);
                 // *sample = delayed_sample;
 
                 // process delayed sample
@@ -414,9 +480,9 @@ impl Plugin for SaiSampler {
                 let sample = channel_samples.get_mut(1).unwrap();
 
                 // the sample from eons ago (the latency)
-                let delayed_sample = *self.buf.get(0).unwrap();
+                let delayed_sample = *self.latency_buf.get(0).unwrap();
                 // push sample to buffer queue
-                self.buf.push(*sample);
+                self.latency_buf.push(*sample);
                 // *sample = delayed_sample;
 
                 // process delayed sample
