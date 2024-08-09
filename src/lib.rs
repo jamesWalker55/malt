@@ -171,11 +171,10 @@ impl<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> EnvelopeLane<A
 
 pub struct SaiSampler {
     params: Arc<SaiSamplerParams>,
+    // fixed variables (per session)
     sr: f32,
-    latency_seconds: f32,
-    latency_samples: usize,
     max_latency_samples: usize,
-    current_slope: Slope,
+    // audio processing stuff:
     splitter_l: MultibandGainApplier,
     splitter_r: MultibandGainApplier,
     env_low: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
@@ -183,6 +182,10 @@ pub struct SaiSampler {
     env_high: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
     latency_buf_l: AllocRingBuffer<f32>,
     latency_buf_r: AllocRingBuffer<f32>,
+    // keep track of when parameters get changed:
+    latency_seconds: f32,
+    latency_samples: usize,
+    current_slope: Slope,
 }
 
 impl Default for SaiSampler {
@@ -451,10 +454,12 @@ impl Plugin for SaiSampler {
         _buffer_config: &BufferConfig,
         _context: &mut impl InitContext<Self>,
     ) -> bool {
+        // constants per session
         self.sr = _buffer_config.sample_rate;
-
-        // report latency
         self.max_latency_samples = (MAX_LATENCY_SECONDS * self.sr).round() as usize;
+
+        // allocate buffers for storing old samples
+        // buffer length should be `self.max_latency_samples`
         self.latency_buf_l = {
             let mut buf = AllocRingBuffer::new(self.max_latency_samples);
             buf.fill(0.0);
