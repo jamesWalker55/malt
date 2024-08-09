@@ -133,8 +133,8 @@ impl<A: Curve, R: Curve> Envelope<A, R> {
 
     /// Return the progress of this envelope in percentage (0.0 to 1.0)
     pub(crate) fn progress(&self) -> f32 {
-        (self.delay_remaining + self.attack_remaining + self.release_remaining)
-            / (self.delay + self.attack + self.release)
+        1.0 - ((self.delay_remaining + self.attack_remaining + self.release_remaining)
+            / (self.delay + self.attack + self.release))
     }
 
     /// Get the current value (from 0.0 -- 1.0), then increment the state.
