@@ -1,4 +1,4 @@
-# Malt - Multiband Sidechain Plugin (Abandoned)
+# Malt - Multiband Sidechain Plugin (WIP)
 
 ![](mockup.png)
 
