@@ -1,14 +1,8 @@
-// Ardura 2024 update - ui_knob.rs - egui + nih-plug parameter widget with customization
-//  this ui_knob.rs is built off a2aaron's knob base as part of nyasynth and Robbert's ParamSlider code
-// https://github.com/a2aaron/nyasynth/blob/canon/src/ui_knob.rs
-
 use nih_plug::prelude::{Param, ParamSetter};
 use nih_plug_egui::egui::{
-    self,
     epaint::{CircleShape, PathShape},
     pos2, Color32, Pos2, Response, Sense, Shape, Stroke, Ui, Vec2, Widget,
 };
-use once_cell::sync::Lazy;
 use std::{
     f32::consts::TAU,
     ops::{Add, Mul, Sub},
@@ -18,8 +12,6 @@ use std::{
 /// noramlized parameter.
 const GRANULAR_DRAG_MULTIPLIER: f32 = 0.001;
 const NORMAL_DRAG_MULTIPLIER: f32 = 0.005;
-
-static HOVER_AREA_ID: Lazy<egui::Id> = Lazy::new(|| egui::Id::new((file!(), "hover_area")));
 
 pub(crate) struct Knob<'a, P: Param> {
     size: f32,
@@ -122,12 +114,6 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
                     response.mark_changed();
                 }
             }
-
-            // TODO: Double-clicking should start text edit
-            // if response.double_clicked() {
-            //     self.reset_param();
-            //     response.mark_changed();
-            // }
 
             if response.drag_stopped() {
                 self.param_setter.end_set_parameter(self.param);
@@ -239,34 +225,6 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
                     });
                     painter.add(center_ball);
                 }
-            }
-
-            // Show hover text
-            if response.hovered() {
-                use egui::*;
-
-                Area::new(*HOVER_AREA_ID)
-                    .order(Order::Tooltip)
-                    // top-left corner of area:
-                    .fixed_pos(Pos2::new(50.0, 100.0))
-                    .movable(false)
-                    .interactable(true)
-                    .show(ui.ctx(), |ui| {
-                        Frame::popup(&ui.ctx().style())
-                            .show(ui, |ui| {
-                                ui.label("WIP hover popup!");
-                                ui.label("WIP hover popup!");
-                                ui.label("WIP hover popup!");
-                                ui.label("WIP hover popup!");
-                                ui.label("WIP hover popup!");
-                            })
-                            .inner
-                    });
-
-                // see source code of this for reference:
-                // response
-                //     .clone()
-                //     .on_hover_text_at_pointer(self.param.to_string());
             }
         });
         response
