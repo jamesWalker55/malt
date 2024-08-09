@@ -167,6 +167,22 @@ impl<A: Curve, R: Curve> Envelope<A, R> {
     }
 }
 
+impl<A: Curve + Default, R: Curve + Default> Default for Envelope<A, R> {
+    fn default() -> Self {
+        Self {
+            sr: Default::default(),
+            delay: Default::default(),
+            delay_remaining: Default::default(),
+            attack: Default::default(),
+            attack_remaining: Default::default(),
+            release: Default::default(),
+            release_remaining: Default::default(),
+            attack_curve: Default::default(),
+            release_curve: Default::default(),
+        }
+    }
+}
+
 /// This should define a graph that starts from 0.0 to 1.0.
 pub(crate) trait Curve {
     /// Range of `x` is 0.0 to 1.0
@@ -175,6 +191,7 @@ pub(crate) trait Curve {
     fn get_y(&self, x: f32) -> f32;
 }
 
+#[derive(Default)]
 pub(crate) struct EaseInOutSine;
 
 impl Curve for EaseInOutSine {
@@ -184,6 +201,7 @@ impl Curve for EaseInOutSine {
     }
 }
 
+#[derive(Default)]
 pub(crate) struct EaseInSine;
 
 impl Curve for EaseInSine {
