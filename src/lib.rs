@@ -1,6 +1,5 @@
 mod biquad;
 mod envelope;
-mod gui;
 mod oscillator;
 mod parameter_formatters;
 mod pattern;
@@ -15,7 +14,6 @@ use envelope::EaseInOutSine;
 use envelope::EaseInSine;
 use envelope::Envelope;
 use nih_plug::prelude::*;
-use nih_plug_egui::EguiState;
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use splitter::DynamicThreeBand24Slope;
@@ -33,17 +31,6 @@ pub struct SaiSampler {
     buf: AllocRingBuffer<f32>,
     env: Option<Envelope<EaseInSine, EaseInOutSine>>,
     env_filter: FixedQFilter<FirstOrderLP>,
-
-    /// The editor state, saved together with the parameter state so the custom scaling can be
-    /// restored.
-    // #[persist = "editor-state"]
-    editor_state: Arc<EguiState>,
-    /// The current data for the peak meter. This is stored as an [`Arc`] so we can share it between
-    /// the GUI and the audio processing parts. If you have more state to share, then it's a good
-    /// idea to put all of that in a struct behind a single `Arc`.
-    ///
-    /// This is stored as voltage gain.
-    peak_meter: Arc<AtomicF32>,
 }
 
 impl Default for SaiSampler {
@@ -59,9 +46,6 @@ impl Default for SaiSampler {
             buf: AllocRingBuffer::new(1),
             env: None,
             env_filter: FixedQFilter::new(0.0, 0.0),
-            // TEMP
-            peak_meter: Arc::new(AtomicF32::new(util::MINUS_INFINITY_DB)),
-            editor_state: EguiState::from_size(gui::GUI_WIDTH, gui::GUI_HEIGHT),
         }
     }
 }
@@ -376,32 +360,9 @@ impl Plugin for SaiSampler {
                 amplitude += sample.abs();
                 // *sample = *sample * env_val as f32;
             }
-
-            // GUI-specific code
-            if self.editor_state.is_open() {
-                // divide by 2 channels
-                amplitude = amplitude / 2.0;
-                let current_peak_meter = self.peak_meter.load(std::sync::atomic::Ordering::Relaxed);
-                const PEAK_METER_DECAY_MS: f64 = 150.0;
-                let peak_meter_decay_weight =
-                    0.25f64.powf((self.sr as f64 * PEAK_METER_DECAY_MS / 1000.0).recip()) as f32;
-                let new_peak_meter = if amplitude > current_peak_meter {
-                    amplitude
-                } else {
-                    current_peak_meter * peak_meter_decay_weight
-                        + amplitude * (1.0 - peak_meter_decay_weight)
-                };
-
-                self.peak_meter
-                    .store(new_peak_meter, std::sync::atomic::Ordering::Relaxed)
-            }
         }
 
         ProcessStatus::Normal
-    }
-
-    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        gui::create_gui(self, _async_executor)
     }
 }
 
