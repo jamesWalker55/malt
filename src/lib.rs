@@ -336,9 +336,6 @@ impl Plugin for SaiSampler {
         let mut next_event = ctx.next_event();
 
         for (sample_id, mut channel_samples) in buffer.iter_samples().enumerate() {
-            // GUI-specific variables
-            let mut amplitude = 0.0;
-
             // update params
             let low_gain = self.params.low_gain.smoothed.next() as f64;
             let mid_gain = self.params.mid_gain.smoothed.next() as f64;
@@ -445,7 +442,6 @@ impl Plugin for SaiSampler {
             env_val = self.env_filter.process_sample(env_val.into()) as f32;
             for sample in channel_samples {
                 *sample = *sample * db_to_gain(env_val as f32);
-                amplitude += sample.abs();
                 // *sample = *sample * env_val as f32;
             }
         }
