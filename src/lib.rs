@@ -30,6 +30,7 @@ enum MultibandGainApplier {
 }
 
 impl MultibandGainApplier {
+    /// Gain is scalar, 0.0 to 1.0 and beyond
     fn apply_gain(&mut self, sample: f64, gains: &[f64; 3]) -> f64 {
         match self {
             MultibandGainApplier::ThreeBand24(splitter) => splitter.apply_gain(sample, gains),
@@ -49,6 +50,112 @@ impl MultibandGainApplier {
     }
 }
 
+struct EnvelopeLane<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> {
+    sr: f32,
+    latency_seconds: f32,
+    voices: [Option<Envelope<A, R>>; VOICES],
+    filter: FixedQFilter<FirstOrderLP>,
+    smooth: bool,
+}
+
+impl<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> EnvelopeLane<A, R, VOICES> {
+    const EMPTY_VOICE: Option<Envelope<A, R>> = None;
+
+    fn new(sr: f64, latency_seconds: f32, smooth: bool) -> Self {
+        Self {
+            sr: sr as f32,
+            latency_seconds,
+            voices: [Self::EMPTY_VOICE; VOICES],
+            filter: FixedQFilter::new(1000.0, sr),
+            smooth,
+        }
+    }
+
+    fn add(&mut self, precomp: f32, decay: f32, attack_curve: A, release_curve: R) {
+        let env = Envelope::new(
+            self.sr,
+            self.latency_seconds - precomp,
+            precomp,
+            decay,
+            attack_curve,
+            release_curve,
+        );
+
+        let insertion_idx = {
+            // insert into an empty cell
+            match self.voices.iter().position(|x| x.is_none()) {
+                Some(idx) => idx,
+                // if no empty cells, find the envelope that's closest to finishing
+                None => {
+                    self.voices
+                        .iter()
+                        .enumerate()
+                        .max_by(|(_, opt1), (_, opt2)| match (opt1, opt2) {
+                            (None, None) => unreachable!(),
+                            (None, Some(_)) => unreachable!(),
+                            (Some(_), None) => unreachable!(),
+                            (Some(voice1), Some(voice2)) => {
+                                voice1.progress().total_cmp(&voice2.progress())
+                            }
+                        })
+                        .expect("envelope lane must have size of at least 1")
+                        .0
+                }
+            }
+        };
+
+        self.voices[insertion_idx] = Some(env);
+    }
+
+    fn set_release(&mut self, release: f32) {
+        for voice in &mut self.voices {
+            let Some(voice) = voice else {
+                continue;
+            };
+
+            voice.set_release(release);
+        }
+    }
+
+    fn tick(&mut self) -> f32 {
+        // collect all envelope values into a single value
+        let result = self
+            .voices
+            .iter_mut()
+            .filter_map(|x| match x {
+                Some(voice) => voice.tick(),
+                None => None,
+            })
+            // use `max_by()` to get the highest envelope at this point.
+            // if you want the envelopes to stack, use `sum()` instead.
+            .max_by(|a, b| a.total_cmp(b))
+            .unwrap_or(0.0);
+
+        // remove inactive envelopes
+        for cell in &mut self.voices {
+            {
+                let Some(voice) = cell else {
+                    continue;
+                };
+
+                if !voice.is_complete() {
+                    continue;
+                }
+            };
+
+            // the cell is filled, and the voice is complete
+            // clear it now
+            *cell = None;
+        }
+
+        if !self.smooth {
+            return result;
+        }
+
+        self.filter.process_sample(result as f64) as f32
+    }
+}
+
 pub struct SaiSampler {
     params: Arc<SaiSamplerParams>,
     sr: f32,
@@ -56,9 +163,8 @@ pub struct SaiSampler {
     latency_samples: u32,
     splitter_l: MultibandGainApplier,
     splitter_r: MultibandGainApplier,
+    envelopes: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
     latency_buf: AllocRingBuffer<f32>,
-    env: Option<Envelope<EaseInSine, EaseInOutSine>>,
-    env_filter: FixedQFilter<FirstOrderLP>,
 }
 
 impl Default for SaiSampler {
@@ -76,8 +182,7 @@ impl Default for SaiSampler {
                 0.0, 0.0, 0.0,
             )),
             latency_buf: AllocRingBuffer::new(1),
-            env: None,
-            env_filter: FixedQFilter::new(0.0, 0.0),
+            envelopes: EnvelopeLane::new(0.0, 0.0, false),
         }
     }
 }
@@ -357,11 +462,11 @@ impl Plugin for SaiSampler {
         ));
 
         // clear envelope
-        self.env = None;
-        // a filter to smooth the envelope
-        // at 600Hz it settles in about 2ms
-        // switch to 1000Hz to settle in about 1ms
-        self.env_filter = FixedQFilter::new(1000.0, self.sr.into());
+        self.envelopes = EnvelopeLane::new(
+            self.sr.into(),
+            self.latency_seconds,
+            self.params.smoothing.value(),
+        );
     }
 
     fn process(
@@ -429,18 +534,9 @@ impl Plugin for SaiSampler {
 
                 match event {
                     NoteEvent::NoteOn { note, .. } => {
-                        self.env = Some(Envelope::new(
-                            self.sr,
-                            self.latency_seconds - low_precomp,
-                            low_precomp,
-                            low_decay,
-                            EaseInSine,
-                            EaseInOutSine,
-                        ));
+                        self.envelopes
+                            .add(low_precomp, low_decay, EaseInSine, EaseInOutSine)
                     }
-                    // NoteEvent::NoteOff { note, .. } => (),
-                    // NoteEvent::Choke { note, .. } => (),
-                    // NoteEvent::MidiPitchBend { value, .. } => (),
                     _ => (),
                 }
 
@@ -448,9 +544,7 @@ impl Plugin for SaiSampler {
             }
 
             // update existing envelopes (if any)
-            if let Some(env) = &mut self.env {
-                env.set_release(low_decay);
-            }
+            self.envelopes.set_release(low_decay);
 
             // update filter frequency
             self.splitter_l
@@ -493,21 +587,9 @@ impl Plugin for SaiSampler {
             }
 
             // test process envelope
-            let mut env_val = if let Some(env) = &mut self.env {
-                let x = env.tick();
-                if let Some(x) = x {
-                    x
-                } else {
-                    // envelope has ended
-                    self.env = None;
-                    0.0
-                }
-            } else {
-                0.0
-            };
-            env_val = self.env_filter.process_sample(env_val.into()) as f32;
+            let env_val = self.envelopes.tick();
             for sample in channel_samples {
-                *sample = *sample * db_to_gain(env_val as f32);
+                *sample = *sample * env_val;
                 // *sample = *sample * env_val as f32;
             }
         }
