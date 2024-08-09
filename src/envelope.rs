@@ -1,5 +1,7 @@
 use std::f32::consts::PI;
 
+use crate::pattern::Pattern;
+
 pub(crate) struct Envelope<A: Curve, R: Curve> {
     sr: f32,
 
@@ -208,5 +210,11 @@ impl Curve for EaseInSine {
     fn get_y(&self, x: f32) -> f32 {
         // https://easings.net/#easeInOutSine
         1.0 - ((x * PI) / 2.0).cos()
+    }
+}
+
+impl Curve for Pattern {
+    fn get_y(&self, x: f32) -> f32 {
+        self.get_y_at(x as f64) as f32
     }
 }
