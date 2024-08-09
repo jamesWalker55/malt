@@ -10,8 +10,8 @@ use std::{
 
 /// When shift+dragging a parameter, one pixel dragged corresponds to this much change in the
 /// noramlized parameter.
-const GRANULAR_DRAG_MULTIPLIER: f32 = 0.0005;
-const NORMAL_DRAG_MULTIPLIER: f32 = 0.002;
+const GRANULAR_DRAG_MULTIPLIER: f32 = 0.0002;
+const NORMAL_DRAG_MULTIPLIER: f32 = 0.001;
 
 pub(crate) enum KnobStyle {
     Analog {
