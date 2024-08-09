@@ -1,4 +1,7 @@
-use crate::{widgets::Knob, SaiSampler};
+use crate::{
+    widgets::{Knob, KnobStyle},
+    SaiSampler,
+};
 use nih_plug::prelude::*;
 use nih_plug_egui::{
     create_egui_editor,
@@ -161,8 +164,10 @@ pub(crate) fn create_gui(
                         &params.gain_reduction,
                         setter,
                         34.0,
-                        Color32::from_rgb(255, 245, 157),
-                        2.0,
+                        KnobStyle::Analog {
+                            highlight_color: Color32::from_rgb(255, 245, 157),
+                            line_width: 2.0,
+                        },
                     );
                     ui.add(knob);
 
@@ -170,8 +175,10 @@ pub(crate) fn create_gui(
                         &params.release,
                         setter,
                         44.0,
-                        Color32::from_rgb(206, 147, 216),
-                        2.0,
+                        KnobStyle::Analog {
+                            highlight_color: Color32::from_rgb(206, 147, 216),
+                            line_width: 2.0,
+                        },
                     );
                     ui.add(knob);
                 });

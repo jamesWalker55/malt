@@ -13,10 +13,17 @@ use std::{
 const GRANULAR_DRAG_MULTIPLIER: f32 = 0.0005;
 const NORMAL_DRAG_MULTIPLIER: f32 = 0.002;
 
+pub(crate) enum KnobStyle {
+    Analog {
+        highlight_color: Color32,
+        line_width: f32,
+    },
+    Donut,
+}
+
 pub(crate) struct Knob<'a, P: Param> {
     size: f32,
-    line_width: f32,
-    highlight_color: Color32,
+    style: KnobStyle,
     param: &'a P,
     param_setter: &'a ParamSetter<'a>,
 }
@@ -35,13 +42,11 @@ impl<'a, P: Param> Knob<'a, P> {
         param: &'a P,
         param_setter: &'a ParamSetter,
         size: f32,
-        highlight_color: Color32,
-        line_width: f32,
+        style: KnobStyle,
     ) -> Self {
         Knob {
             size,
-            line_width,
-            highlight_color,
+            style,
             param,
             param_setter,
         }
@@ -122,116 +127,125 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
 
         let value = self.normalized_value();
 
-        ui.vertical(|ui| {
-            let painter = ui.painter_at(response.rect);
-            let center = response.rect.center();
+        match &self.style {
+            KnobStyle::Analog {
+                highlight_color,
+                line_width,
+            } => {
+                ui.vertical(|ui| {
+                    let painter = ui.painter_at(response.rect);
+                    let center = response.rect.center();
 
-            // since we will draw a stroke, we need to account for the line's width
-            // outline radius should be: size / 2.0 - line_width / 2.0
-            // this formula is the same, simplified:
-            let outline_radius = (self.size - self.line_width) / 2.0;
-            let center_radius = self.size / 2.0 - self.line_width;
+                    // since we will draw a stroke, we need to account for the line's width
+                    // outline radius should be: size / 2.0 - line_width / 2.0
+                    // this formula is the same, simplified:
+                    let outline_radius = (self.size - line_width) / 2.0;
+                    let center_radius = self.size / 2.0 - line_width;
 
-            // Draw the inactive arc behind the highlight line
-            {
-                let shape = Shape::Path(PathShape {
-                    points: get_arc_points(
-                        1.0,
-                        Self::ARC_START,
-                        Self::ARC_END,
-                        center,
-                        // improve rendering by making outline overlap with knob center a bit
-                        outline_radius - 1.0,
-                        0.2,
-                    ),
-                    closed: false,
-                    fill: Color32::TRANSPARENT,
-                    // improve rendering by making outline overlap with knob center a bit
-                    stroke: Stroke::new(self.line_width + 2.0, Self::BG_COLOR),
+                    // Draw the inactive arc behind the highlight line
+                    {
+                        let shape = Shape::Path(PathShape {
+                            points: get_arc_points(
+                                1.0,
+                                Self::ARC_START,
+                                Self::ARC_END,
+                                center,
+                                // improve rendering by making outline overlap with knob center a bit
+                                outline_radius - 1.0,
+                                0.2,
+                            ),
+                            closed: false,
+                            fill: Color32::TRANSPARENT,
+                            // improve rendering by making outline overlap with knob center a bit
+                            stroke: Stroke::new(line_width + 2.0, Self::BG_COLOR),
+                        });
+                        painter.add(shape);
+                    }
+
+                    // Draw the highlight line
+                    {
+                        let shape = Shape::Path(PathShape {
+                            points: get_arc_points(
+                                value,
+                                Self::ARC_START,
+                                Self::ARC_END,
+                                center,
+                                // improve rendering by making outline overlap with knob center a bit
+                                outline_radius - 1.0,
+                                0.2,
+                            ),
+                            closed: false,
+                            fill: Color32::TRANSPARENT,
+                            // improve rendering by making outline overlap with knob center a bit
+                            stroke: Stroke::new(line_width + 2.0, *highlight_color),
+                        });
+                        painter.add(shape);
+                    }
+
+                    // Center of Knob
+                    {
+                        let shape = Shape::Circle(CircleShape {
+                            center,
+                            radius: center_radius,
+                            stroke: Stroke::NONE,
+                            fill: Self::KNOB_COLOR,
+                        });
+                        painter.add(shape);
+                    }
+
+                    // Draw the knob marker line
+                    {
+                        // make the marker line begin off-center
+                        let inner_radius = line_width;
+                        // make the marker line terminate just before it reaches the highlight ring
+                        // also add 0.25 pixel to make it look nicer
+                        let outer_radius = outline_radius - line_width + 0.25;
+
+                        // find start and end point
+                        let angle = lerp(Self::ARC_START, Self::ARC_END, value);
+                        let start_point = {
+                            let x = center.x + inner_radius * angle.cos();
+                            let y = center.y + inner_radius * -angle.sin();
+                            pos2(x, y)
+                        };
+                        let end_point = {
+                            let x = center.x + outer_radius * angle.cos();
+                            let y = center.y + outer_radius * -angle.sin();
+                            pos2(x, y)
+                        };
+
+                        let line_shape = Shape::Path(PathShape {
+                            points: vec![start_point, end_point],
+                            closed: false,
+                            fill: Self::LINE_COLOR,
+                            stroke: Stroke::new(*line_width, Self::LINE_COLOR),
+                        });
+                        painter.add(line_shape);
+
+                        if *line_width > 3.0 {
+                            // Draw circles ("balls") at ends of highlight line to mimic a rounded stroke
+                            let ball_radius = line_width / 2.0 - 1.0;
+                            let end_ball = Shape::Circle(CircleShape {
+                                center: end_point,
+                                radius: ball_radius,
+                                fill: Self::LINE_COLOR,
+                                stroke: Stroke::NONE,
+                            });
+                            painter.add(end_ball);
+                            let center_ball = Shape::Circle(CircleShape {
+                                center: start_point,
+                                radius: ball_radius,
+                                fill: Self::LINE_COLOR,
+                                stroke: Stroke::NONE,
+                            });
+                            painter.add(center_ball);
+                        }
+                    }
                 });
-                painter.add(shape);
             }
+            KnobStyle::Donut => todo!(),
+        }
 
-            // Draw the highlight line
-            {
-                let shape = Shape::Path(PathShape {
-                    points: get_arc_points(
-                        value,
-                        Self::ARC_START,
-                        Self::ARC_END,
-                        center,
-                        // improve rendering by making outline overlap with knob center a bit
-                        outline_radius - 1.0,
-                        0.2,
-                    ),
-                    closed: false,
-                    fill: Color32::TRANSPARENT,
-                    // improve rendering by making outline overlap with knob center a bit
-                    stroke: Stroke::new(self.line_width + 2.0, self.highlight_color),
-                });
-                painter.add(shape);
-            }
-
-            // Center of Knob
-            {
-                let shape = Shape::Circle(CircleShape {
-                    center,
-                    radius: center_radius,
-                    stroke: Stroke::NONE,
-                    fill: Self::KNOB_COLOR,
-                });
-                painter.add(shape);
-            }
-
-            // Draw the knob marker line
-            {
-                // make the marker line begin off-center
-                let inner_radius = self.line_width;
-                // make the marker line terminate just before it reaches the highlight ring
-                // also add 0.25 pixel to make it look nicer
-                let outer_radius = outline_radius - self.line_width + 0.25;
-
-                // find start and end point
-                let angle = lerp(Self::ARC_START, Self::ARC_END, value);
-                let start_point = {
-                    let x = center.x + inner_radius * angle.cos();
-                    let y = center.y + inner_radius * -angle.sin();
-                    pos2(x, y)
-                };
-                let end_point = {
-                    let x = center.x + outer_radius * angle.cos();
-                    let y = center.y + outer_radius * -angle.sin();
-                    pos2(x, y)
-                };
-
-                let line_shape = Shape::Path(PathShape {
-                    points: vec![start_point, end_point],
-                    closed: false,
-                    fill: Self::LINE_COLOR,
-                    stroke: Stroke::new(self.line_width, Self::LINE_COLOR),
-                });
-                painter.add(line_shape);
-
-                if self.line_width > 3.0 {
-                    // Draw circles ("balls") at ends of highlight line to mimic a rounded stroke
-                    let ball_radius = self.line_width / 2.0 - 1.0;
-                    let end_ball = Shape::Circle(CircleShape {
-                        center: end_point,
-                        radius: ball_radius,
-                        fill: Self::LINE_COLOR,
-                        stroke: Stroke::NONE,
-                    });
-                    painter.add(end_ball);
-                    let center_ball = Shape::Circle(CircleShape {
-                        center: start_point,
-                        radius: ball_radius,
-                        fill: Self::LINE_COLOR,
-                        stroke: Stroke::NONE,
-                    });
-                    painter.add(center_ball);
-                }
-            }
-        });
         response
     }
 }
