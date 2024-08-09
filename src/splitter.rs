@@ -219,3 +219,11 @@ impl DynamicThreeBand24Slope {
         sample
     }
 }
+
+pub(crate) struct SingleBand;
+
+impl SingleBand {
+    pub(crate) fn apply_gain(&mut self, sample: Precision, gain: &Precision) -> Precision {
+        sample * gain
+    }
+}
