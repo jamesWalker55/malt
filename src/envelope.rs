@@ -114,7 +114,7 @@ impl<A: Curve, R: Curve> Envelope<A, R> {
         } else if self.release_remaining > 0.0 {
             // in release stage, stretch the remaining release duration
             let ratio = release / self.release;
-            self.release_remaining = self.release_remaining * ratio;
+            self.release_remaining *= ratio;
 
             // now we can update release as usual
             self.release = release;
@@ -148,7 +148,7 @@ impl<A: Curve, R: Curve> Envelope<A, R> {
             Some(0.0)
         } else if self.attack_remaining > 0.0 {
             // in attack phase
-            let x = 1.0 - self.attack_remaining as f32 / self.attack as f32;
+            let x = 1.0 - self.attack_remaining / self.attack;
             let y = self.attack_curve.get_y(x);
 
             self.attack_remaining -= 1.0;
@@ -156,7 +156,7 @@ impl<A: Curve, R: Curve> Envelope<A, R> {
             Some(y)
         } else if self.release_remaining > 0.0 {
             // in release phase
-            let x = 1.0 - self.release_remaining as f32 / self.release as f32;
+            let x = 1.0 - self.release_remaining / self.release;
             let y = 1.0 - self.release_curve.get_y(x);
 
             self.release_remaining -= 1.0;

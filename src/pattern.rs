@@ -33,12 +33,10 @@ impl CurveType {
                 let pwr = (ten * 50.0).abs().powf(1.1);
 
                 if ten >= 0.0 {
-                    return ((x - p1.x) / (p2.x - p1.x)).powf(pwr) * (p2.y - p1.y) + p1.y;
+                    ((x - p1.x) / (p2.x - p1.x)).powf(pwr) * (p2.y - p1.y) + p1.y
                 } else {
-                    return -1.0
-                        * ((1.0 - (x - p1.x) / (p2.x - p1.x)).powf(pwr) - 1.0)
-                        * (p2.y - p1.y)
-                        + p1.y;
+                    -1.0 * ((1.0 - (x - p1.x) / (p2.x - p1.x)).powf(pwr) - 1.0) * (p2.y - p1.y)
+                        + p1.y
                 }
             }
             Self::SCurve => {
@@ -69,7 +67,7 @@ impl CurveType {
                         + yy;
                 }
 
-                return ((x - xx) / (p2.x - xx)).powf(pwr) * (p2.y - yy) + yy;
+                ((x - xx) / (p2.x - xx)).powf(pwr) * (p2.y - yy) + yy
             }
             Self::Pulse => {
                 let t = (p1.tension.powi(2) * 100.0).floor().max(1.0); // num waves
@@ -87,12 +85,10 @@ impl CurveType {
                     } else {
                         p2.y
                     }
+                } else if p1.tension >= 0.0 {
+                    p2.y
                 } else {
-                    if p1.tension >= 0.0 {
-                        p2.y
-                    } else {
-                        p1.y
-                    }
+                    p1.y
                 }
             }
             Self::Wave => {
@@ -164,7 +160,7 @@ impl CurveType {
                         + yy;
                 }
 
-                return ((x - xx) / (xx2 - xx)).powi(pwr) * (yy2 - yy) + yy;
+                ((x - xx) / (xx2 - xx)).powi(pwr) * (yy2 - yy) + yy
             }
         }
     }
@@ -295,7 +291,7 @@ impl Pattern {
         }
 
         // decrement i by 1 to offset by starting point
-        i = i - 1;
+        i -= 1;
 
         if i < self.mid_points.len() {
             self.mid_points.remove(i);
@@ -341,7 +337,7 @@ impl Pattern {
             // has at least 1 mid point
 
             // process first point
-            Self::reverse_point(&mut self.first_point, self.mid_points.get(0).unwrap());
+            Self::reverse_point(&mut self.first_point, self.mid_points.first().unwrap());
 
             // process mid points, except last mid-point
             {
@@ -355,7 +351,7 @@ impl Pattern {
                 }
 
                 // finally process the last mid-point
-                let ref mut second_last_point = slice[slice.len() - 1];
+                let second_last_point = &mut slice[slice.len() - 1];
                 Self::reverse_point(second_last_point, &self.last_point);
             }
         }
@@ -378,7 +374,7 @@ impl Pattern {
         // handle start point
         {
             let p1 = &self.first_point;
-            let p2 = self.mid_points.get(0).unwrap();
+            let p2 = self.mid_points.first().unwrap();
             if p1.x <= x && x <= p2.x {
                 return CurveType::get_y(p1, p2, x);
             }
@@ -395,7 +391,7 @@ impl Pattern {
 
         // handle last mid-point
         {
-            let p1 = self.mid_points.get(self.mid_points.len() - 1).unwrap();
+            let p1 = self.mid_points.last().unwrap();
             let p2 = &self.last_point;
             if p1.x <= x && x <= p2.x {
                 return CurveType::get_y(p1, p2, x);

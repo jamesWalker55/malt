@@ -612,16 +612,13 @@ impl Plugin for Malt {
                     break;
                 }
 
-                match event {
-                    NoteEvent::NoteOn { .. } => {
-                        self.env_low
-                            .add(low_precomp, low_decay, EaseInSine, EaseInOutSine);
-                        self.env_mid
-                            .add(mid_precomp, mid_decay, EaseInSine, EaseInOutSine);
-                        self.env_high
-                            .add(high_precomp, high_decay, EaseInSine, EaseInOutSine);
-                    }
-                    _ => (),
+                if let NoteEvent::NoteOn { .. } = event {
+                    self.env_low
+                        .add(low_precomp, low_decay, EaseInSine, EaseInOutSine);
+                    self.env_mid
+                        .add(mid_precomp, mid_decay, EaseInSine, EaseInOutSine);
+                    self.env_high
+                        .add(high_precomp, high_decay, EaseInSine, EaseInOutSine);
                 }
 
                 next_event = ctx.next_event();

@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use nih_plug::{formatters::s2v_i32_note_formatter, util};
-
 /// Format a `f32` Hertz value as a rounded `Hz` below 1000 Hz, and as a rounded `kHz` value above
 /// 1000 Hz. This already includes the unit.
 pub(crate) fn v2s_f32_ms_then_s(digits: usize) -> Arc<dyn Fn(f32) -> String + Send + Sync> {

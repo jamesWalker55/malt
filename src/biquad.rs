@@ -72,7 +72,7 @@ impl Biquad {
         self.u2 = self.u1;
         self.u1 = u0;
 
-        return u0;
+        u0
     }
 }
 
