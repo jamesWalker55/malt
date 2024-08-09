@@ -616,35 +616,37 @@ impl Plugin for SaiSampler {
                 .set_frequencies(low_crossover.into(), high_crossover.into());
 
             #[inline(always)]
-            fn calculate_final_gain(env_val: f64, max_gain_db: f64, mix: f64) -> f32 {
-                db_to_gain(-(max_gain_db * env_val * mix) as f32)
+            fn calculate_final_gain(env_val: f64, max_gain_db: f64, mix: f64, bypass: bool) -> f64 {
+                if bypass {
+                    1.0
+                } else {
+                    let new_gain = db_to_gain(-(max_gain_db * env_val) as f32) as f64;
+                    // mix should operate scalar-wise, not in dB units
+                    // i.e. don't put `mix` inside the `db_to_gain` function
+                    mix * (new_gain - 1.0) + 1.0
+                }
             }
 
             // tick envelopes and get gain value
-            let low_gain;
-            let mid_gain;
-            let high_gain;
-            if bypass {
-                low_gain = 1.0;
-                mid_gain = 1.0;
-                high_gain = 1.0;
-            } else {
-                low_gain = calculate_final_gain(
-                    self.env_low.tick() as f64,
-                    low_max_gain_db as f64,
-                    mix as f64,
-                ) as f64;
-                mid_gain = calculate_final_gain(
-                    self.env_mid.tick() as f64,
-                    mid_max_gain_db as f64,
-                    mix as f64,
-                ) as f64;
-                high_gain = calculate_final_gain(
-                    self.env_high.tick() as f64,
-                    high_max_gain_db as f64,
-                    mix as f64,
-                ) as f64;
-            }
+            // we intentionally always call envelope's `tick()` even when bypassed:
+            let low_gain = calculate_final_gain(
+                self.env_low.tick() as f64,
+                low_max_gain_db as f64,
+                mix as f64,
+                bypass,
+            ) as f64;
+            let mid_gain = calculate_final_gain(
+                self.env_mid.tick() as f64,
+                mid_max_gain_db as f64,
+                mix as f64,
+                bypass,
+            ) as f64;
+            let high_gain = calculate_final_gain(
+                self.env_high.tick() as f64,
+                high_max_gain_db as f64,
+                mix as f64,
+                bypass,
+            ) as f64;
 
             // left channel
             {
