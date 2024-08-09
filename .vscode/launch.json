@@ -8,7 +8,7 @@
       "cargo": {
         "args": ["build"],
         "filter": {
-          "name": "sai_sampler",
+          "name": "malt",
           "kind": "bin"
         }
       },

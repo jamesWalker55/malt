@@ -1,11 +1,11 @@
 [package]
-name = "sai_sampler"
+name = "malt"
 version = "0.1.0"
 edition = "2021"
-authors = ["James Walker <your@email.com>"]
+authors = ["James Walker <james.chunho@gmail.com>"]
 license = "ISC"
 homepage = "https://youtu.be/dQw4w9WgXcQ"
-description = "An audio sampler"
+description = "A multiband sidechain plugin"
 
 [workspace]
 members = ["xtask"]

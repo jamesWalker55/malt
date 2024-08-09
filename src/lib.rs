@@ -180,8 +180,8 @@ impl<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> EnvelopeLane<A
     }
 }
 
-pub struct SaiSampler {
-    params: Arc<SaiSamplerParams>,
+pub struct Malt {
+    params: Arc<MaltParams>,
     // fixed variables (per session)
     sr: f32,
     max_latency_samples: usize,
@@ -199,10 +199,10 @@ pub struct SaiSampler {
     current_slope: Slope,
 }
 
-impl Default for SaiSampler {
+impl Default for Malt {
     fn default() -> Self {
         Self {
-            params: Arc::new(SaiSamplerParams::default()),
+            params: Arc::new(MaltParams::default()),
             // these fields are not initialised here, see `initialize()` for the actual values
             sr: 0.0,
             latency_seconds: 0.0,
@@ -235,7 +235,7 @@ enum Slope {
 }
 
 #[derive(Params)]
-struct SaiSamplerParams {
+struct MaltParams {
     #[id = "low_precomp"]
     pub(crate) low_precomp: FloatParam,
     #[id = "mid_precomp"]
@@ -277,7 +277,7 @@ struct SaiSamplerParams {
     pub(crate) mix: FloatParam,
 }
 
-impl Default for SaiSamplerParams {
+impl Default for MaltParams {
     fn default() -> Self {
         Self {
             low_precomp: FloatParam::new(
@@ -429,11 +429,11 @@ impl Default for SaiSamplerParams {
     }
 }
 
-impl Plugin for SaiSampler {
-    const NAME: &'static str = "SAI Sampler";
-    const VENDOR: &'static str = "James Walker";
+impl Plugin for Malt {
+    const NAME: &'static str = "Malt";
+    const VENDOR: &'static str = "SAI Audio";
     const URL: &'static str = env!("CARGO_PKG_HOMEPAGE");
-    const EMAIL: &'static str = "your@email.com";
+    const EMAIL: &'static str = "hello@example.com";
 
     const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
@@ -712,8 +712,8 @@ impl Plugin for SaiSampler {
     }
 }
 
-impl ClapPlugin for SaiSampler {
-    const CLAP_ID: &'static str = "com.sai-audio.sai-sampler";
+impl ClapPlugin for Malt {
+    const CLAP_ID: &'static str = "com.sai-audio.malt";
     const CLAP_DESCRIPTION: Option<&'static str> = None;
     const CLAP_MANUAL_URL: Option<&'static str> = None;
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
@@ -721,12 +721,12 @@ impl ClapPlugin for SaiSampler {
     const CLAP_FEATURES: &'static [ClapFeature] = &[ClapFeature::AudioEffect, ClapFeature::Stereo];
 }
 
-impl Vst3Plugin for SaiSampler {
-    const VST3_CLASS_ID: [u8; 16] = *b"WMbSpkNDqN0uignG";
+impl Vst3Plugin for Malt {
+    const VST3_CLASS_ID: [u8; 16] = *b"F34E6qkOzK76mc0Q";
 
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] =
         &[Vst3SubCategory::Fx, Vst3SubCategory::Dynamics];
 }
 
-nih_export_clap!(SaiSampler);
-nih_export_vst3!(SaiSampler);
+nih_export_clap!(Malt);
+nih_export_vst3!(Malt);

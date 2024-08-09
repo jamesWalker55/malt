@@ -1,6 +1,6 @@
 use nih_plug::prelude::*;
-use sai_sampler::SaiSampler;
+use malt::Malt;
 
 fn main() {
-    nih_export_standalone::<SaiSampler>();
+    nih_export_standalone::<Malt>();
 }
