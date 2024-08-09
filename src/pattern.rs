@@ -244,7 +244,7 @@ impl Pattern {
         if points
             .as_slice()
             .windows(2)
-            .any(|slice| &slice[0].x > &slice[1].x)
+            .any(|slice| slice[0].x > slice[1].x)
         {
             return None;
         }

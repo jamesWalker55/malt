@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
+type V2SFormatter = dyn Fn(f32) -> String + Send + Sync;
+type S2VFormatter = dyn Fn(&str) -> Option<f32> + Send + Sync;
+
 /// Format a `f32` Hertz value as a rounded `Hz` below 1000 Hz, and as a rounded `kHz` value above
 /// 1000 Hz. This already includes the unit.
-pub(crate) fn v2s_f32_ms_then_s(digits: usize) -> Arc<dyn Fn(f32) -> String + Send + Sync> {
+pub(crate) fn v2s_f32_ms_then_s(digits: usize) -> Arc<V2SFormatter> {
     Arc::new(move |value| {
         if value < 1000.0 {
             format!("{value:.digits$} ms")
@@ -15,7 +18,7 @@ pub(crate) fn v2s_f32_ms_then_s(digits: usize) -> Arc<dyn Fn(f32) -> String + Se
 /// Convert an input in the same format at that of [`v2s_f32_hz_then_khz()`] to a Hertz value. This
 /// additionally also accepts note names in the same format as [`s2v_i32_note_formatter()`], and
 /// optionally also with cents in the form of `D#5, -23 ct.`.
-pub(crate) fn s2v_f32_ms_then_s() -> Arc<dyn Fn(&str) -> Option<f32> + Send + Sync> {
+pub(crate) fn s2v_f32_ms_then_s() -> Arc<S2VFormatter> {
     Arc::new(move |string| {
         let string = string.trim();
 
