@@ -163,7 +163,9 @@ pub struct SaiSampler {
     latency_samples: u32,
     splitter_l: MultibandGainApplier,
     splitter_r: MultibandGainApplier,
-    envelopes: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
+    env_low: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
+    env_mid: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
+    env_high: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
     latency_buf: AllocRingBuffer<f32>,
 }
 
@@ -182,7 +184,9 @@ impl Default for SaiSampler {
                 0.0, 0.0, 0.0,
             )),
             latency_buf: AllocRingBuffer::new(1),
-            envelopes: EnvelopeLane::new(0.0, 0.0, false),
+            env_low: EnvelopeLane::new(0.0, 0.0, false),
+            env_mid: EnvelopeLane::new(0.0, 0.0, false),
+            env_high: EnvelopeLane::new(0.0, 0.0, false),
         }
     }
 }
@@ -462,7 +466,17 @@ impl Plugin for SaiSampler {
         ));
 
         // clear envelope
-        self.envelopes = EnvelopeLane::new(
+        self.env_low = EnvelopeLane::new(
+            self.sr.into(),
+            self.latency_seconds,
+            self.params.smoothing.value(),
+        );
+        self.env_mid = EnvelopeLane::new(
+            self.sr.into(),
+            self.latency_seconds,
+            self.params.smoothing.value(),
+        );
+        self.env_high = EnvelopeLane::new(
             self.sr.into(),
             self.latency_seconds,
             self.params.smoothing.value(),
@@ -534,8 +548,12 @@ impl Plugin for SaiSampler {
 
                 match event {
                     NoteEvent::NoteOn { note, .. } => {
-                        self.envelopes
-                            .add(low_precomp, low_decay, EaseInSine, EaseInOutSine)
+                        self.env_low
+                            .add(low_precomp, low_decay, EaseInSine, EaseInOutSine);
+                        self.env_mid
+                            .add(mid_precomp, mid_decay, EaseInSine, EaseInOutSine);
+                        self.env_high
+                            .add(high_precomp, high_decay, EaseInSine, EaseInOutSine);
                     }
                     _ => (),
                 }
@@ -544,7 +562,9 @@ impl Plugin for SaiSampler {
             }
 
             // update existing envelopes (if any)
-            self.envelopes.set_release(low_decay);
+            self.env_low.set_release(low_decay);
+            self.env_mid.set_release(mid_decay);
+            self.env_high.set_release(high_decay);
 
             // update filter frequency
             self.splitter_l
@@ -587,7 +607,7 @@ impl Plugin for SaiSampler {
             }
 
             // test process envelope
-            let env_val = self.envelopes.tick();
+            let env_val = self.env_low.tick();
             for sample in channel_samples {
                 *sample = *sample * env_val;
                 // *sample = *sample * env_val as f32;
