@@ -36,6 +36,8 @@ impl MultibandGainApplier {
     }
 
     pub(crate) fn set_frequencies(&mut self, f1: f64, f2: f64) {
+        nih_debug_assert!(f1 < f2, "f1 must be less than f2");
+
         match self {
             MultibandGainApplier::ThreeBand24(splitter) => {
                 splitter.set_frequencies(f1, f2);
