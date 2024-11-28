@@ -1,8 +1,7 @@
 //! Pattern module, represents a user-editable pattern thing.
 //! Code based on: https://github.com/tiagolr/gate1
 
-use core::f64::consts as C;
-
+use nih_plug::{nih_debug_assert_failure, nih_error};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy)]
@@ -109,9 +108,7 @@ type Result<T, E = PatternError> = std::result::Result<T, E>;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Pattern {
-    first_point: Point,
-    last_point: Point,
-    mid_points: Vec<Point>,
+    points: Vec<Point>,
 }
 
 impl Default for Pattern {
@@ -125,20 +122,18 @@ impl Default for Pattern {
 }
 
 impl Pattern {
-    pub(crate) fn new(mut points: Vec<Point>) -> Option<Self> {
+    pub(crate) fn new(points: Vec<Point>) -> Option<Self> {
         if points.len() < 2 {
             return None;
         }
 
-        // validate last point, must be at end
-        let last_point = points.pop().unwrap();
-        if last_point.x != 1.0 {
+        // validate last point, must be at end x=1.0
+        if points.last().unwrap().x != 1.0 {
             return None;
         }
 
-        // validate first point, must be at start
-        let first_point = points.remove(0);
-        if first_point.x != 0.0 {
+        // validate first point, must be at start x=0.0
+        if points.first().unwrap().x != 0.0 {
             return None;
         }
 
@@ -151,40 +146,51 @@ impl Pattern {
             return None;
         }
 
-        Some(Self {
-            first_point,
-            last_point,
-            mid_points: points,
-            // segments: vec![],
-        })
+        Some(Self { points })
     }
 
     pub(crate) fn insert_point(&mut self, p: Point) -> usize {
         // insert point, keeping the list sorted
         // if multiple points have the same x pos, insert at last of those points
-        match self.mid_points.iter().rposition(|p2| p2.x <= p.x) {
+        match self.points.iter().rposition(|p2| p2.x <= p.x) {
             Some(prev_pos) => {
-                self.mid_points.insert(prev_pos + 1, p);
-                prev_pos + 1
+                if prev_pos == self.len() - 1 {
+                    // overlaps with rightmost point
+                    // place it just before the last point
+                    self.points.insert(prev_pos, p);
+                    prev_pos
+                // } else if prev_pos == 0 {
+                //     // overlaps with leftmost point
+                //     // place it just after the first point
+                //     self.points.insert(1, p);
+                //     1
+                } else {
+                    // mid point stuff
+                    self.points.insert(prev_pos + 1, p);
+                    prev_pos + 1
+                }
             }
             None => {
-                // this is the leftmost point (except the first point)
-                self.mid_points.insert(0, p);
+                // points must be in range 0.0--1.0
+                // and first point must be 0.0
+                // so this branch should be impossible to occur
+                nih_error!("inserted point is somehow out of bounds");
+                self.points.insert(0, p);
                 0
             }
         }
     }
 
     pub(crate) fn remove_point_at_pos(&mut self, x: f64, y: f64) {
-        self.mid_points.retain(|p| p.x != x || p.y != y);
+        self.points.retain(|p| p.x != x || p.y != y);
     }
 
     /// Return number of points. Will always be at least 2.
     pub(crate) fn len(&self) -> usize {
-        self.mid_points.len() + 2
+        self.points.len()
     }
 
-    pub(crate) fn remove_point(&mut self, mut i: usize) -> Result<()> {
+    pub(crate) fn remove_point(&mut self, i: usize) -> Result<()> {
         if i == 0 {
             return Err(PatternError::EndPointConflict);
         }
@@ -192,11 +198,8 @@ impl Pattern {
             return Err(PatternError::EndPointConflict);
         }
 
-        // decrement i by 1 to offset by starting point
-        i -= 1;
-
-        if i < self.mid_points.len() {
-            self.mid_points.remove(i);
+        if i < self.len() {
+            self.points.remove(i);
             Ok(())
         } else {
             Err(PatternError::PointOutOfBounds)
@@ -204,7 +207,15 @@ impl Pattern {
     }
 
     pub(crate) fn remove_points_in_range(&mut self, x1: f64, x2: f64) {
-        self.mid_points.retain(|p| x1 <= p.x && p.x <= x2);
+        let mut mid_points: Vec<_> = self.points[1..(self.points.len() - 1)].iter().collect();
+        mid_points.retain(|p| x1 <= p.x && p.x <= x2);
+        mid_points.insert(0, &self.points.first().unwrap());
+        mid_points.push(&self.points.last().unwrap());
+
+        // clone all points
+        let new_points: Vec<_> = mid_points.iter().map(|p| (*p).clone()).collect();
+
+        self.points = new_points;
     }
 
     #[inline(always)]
@@ -213,9 +224,7 @@ impl Pattern {
     }
 
     pub(crate) fn invert(&mut self) {
-        Self::invert_point(&mut self.first_point);
-        Self::invert_point(&mut self.last_point);
-        for p in self.mid_points.iter_mut() {
+        for p in self.points.iter_mut() {
             Self::invert_point(p);
         }
     }
@@ -228,79 +237,37 @@ impl Pattern {
 
     pub(crate) fn reverse(&mut self) {
         // reverse order of points
-        std::mem::swap(&mut self.first_point, &mut self.last_point);
-        self.mid_points.reverse();
+        self.points.reverse();
 
-        // update x position of points (and tension)
-        if self.mid_points.is_empty() {
-            // just first and last points
-            Self::reverse_point(&mut self.first_point, &self.last_point);
-        } else {
-            // has at least 1 mid point
-
-            // process first point
-            Self::reverse_point(&mut self.first_point, self.mid_points.first().unwrap());
-
-            // process mid points, except last mid-point
-            {
-                // i have no idea how to get 2 points as mut at the same time
-                let slice = self.mid_points.as_mut_slice();
-                for i in 0..(slice.len() - 1) {
-                    let [ref mut p1, _, ref mut p2] = &mut slice[i..(i + 1)] else {
-                        unreachable!("expected slice with exactly 2 elements");
-                    };
-                    Self::reverse_point(p1, p2);
-                }
-
-                // finally process the last mid-point
-                let second_last_point = &mut slice[slice.len() - 1];
-                Self::reverse_point(second_last_point, &self.last_point);
-            }
+        // i have no idea how to get 2 points as mut at the same time
+        let slice = self.points.as_mut_slice();
+        for i in 0..(slice.len() - 1) {
+            let [ref mut p1, _, ref mut p2] = &mut slice[i..(i + 1)] else {
+                unreachable!("expected slice with exactly 2 elements");
+            };
+            Self::reverse_point(p1, p2);
         }
     }
 
     pub(crate) fn clear(&mut self) {
-        self.mid_points.clear();
-        self.first_point = Point::new(0.0, 0.5, 0.0, CurveType::Curve).unwrap();
-        self.last_point = Point::new(1.0, 0.5, 0.0, CurveType::Curve).unwrap();
+        self.points = vec![
+            Point::new(0.0, 0.5, 0.0, CurveType::Curve).unwrap(),
+            Point::new(1.0, 0.5, 0.0, CurveType::Curve).unwrap(),
+        ];
     }
 
     pub(crate) fn get_y_at(&self, x: f64) -> f64 {
-        if self.mid_points.is_empty() {
-            // just start / end points
-            let p1 = &self.first_point;
-            let p2 = &self.last_point;
-            return CurveType::get_y(p1, p2, x);
-        }
-
-        // handle start point
-        {
-            let p1 = &self.first_point;
-            let p2 = self.mid_points.first().unwrap();
-            if p1.x <= x && x <= p2.x {
-                return CurveType::get_y(p1, p2, x);
-            }
-        }
-
         // handle mid points (except last mid-point)
-        for i in 0..(self.mid_points.len() - 1) {
-            let p1 = self.mid_points.get(i).unwrap();
-            let p2 = self.mid_points.get(i + 1).unwrap();
+        for i in 0..(self.points.len() - 1) {
+            let p1 = self.points.get(i).unwrap();
+            let p2 = self.points.get(i + 1).unwrap();
             if p1.x <= x && x <= p2.x {
                 return CurveType::get_y(p1, p2, x);
             }
         }
 
-        // handle last mid-point
-        {
-            let p1 = self.mid_points.last().unwrap();
-            let p2 = &self.last_point;
-            if p1.x <= x && x <= p2.x {
-                return CurveType::get_y(p1, p2, x);
-            }
-        }
-
-        panic!("called get_y_at with an out-of-bounds value: {}", x);
+        nih_debug_assert_failure!("called get_y_at with an out-of-bounds value: {}", x);
+        unreachable!();
     }
 
     pub(crate) fn sine() -> Self {
