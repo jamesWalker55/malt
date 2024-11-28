@@ -215,31 +215,6 @@ pub struct Malt {
     current_slope: Slope,
 }
 
-impl Default for Malt {
-    fn default() -> Self {
-        Self {
-            params: Arc::new(MaltParams::default()),
-            // these fields are not initialised here, see `initialize()` for the actual values
-            sr: 0.0,
-            latency_seconds: 0.0,
-            latency_samples: 0,
-            max_latency_samples: 0,
-            current_slope: Slope::F24,
-            splitter_l: MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
-                0.0, 0.0, 0.0,
-            )),
-            splitter_r: MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
-                0.0, 0.0, 0.0,
-            )),
-            latency_buf_l: AllocRingBuffer::new(1),
-            latency_buf_r: AllocRingBuffer::new(1),
-            env_low: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
-            env_mid: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
-            env_high: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
-        }
-    }
-}
-
 #[derive(Enum, PartialEq, Eq)]
 enum Slope {
     #[id = "fixed_24"]
@@ -441,6 +416,31 @@ impl Default for MaltParams {
             mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(3))
                 .with_string_to_value(formatters::s2v_f32_percentage()),
+        }
+    }
+}
+
+impl Default for Malt {
+    fn default() -> Self {
+        Self {
+            params: Arc::new(MaltParams::default()),
+            // these fields are not initialised here, see `initialize()` for the actual values
+            sr: 0.0,
+            latency_seconds: 0.0,
+            latency_samples: 0,
+            max_latency_samples: 0,
+            current_slope: Slope::F24,
+            splitter_l: MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
+                0.0, 0.0, 0.0,
+            )),
+            splitter_r: MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
+                0.0, 0.0, 0.0,
+            )),
+            latency_buf_l: AllocRingBuffer::new(1),
+            latency_buf_r: AllocRingBuffer::new(1),
+            env_low: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
+            env_mid: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
+            env_high: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
         }
     }
 }
