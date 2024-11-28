@@ -1,11 +1,9 @@
 mod biquad;
 mod envelope;
-mod oscillator;
 mod parameter_formatters;
 mod pattern;
 mod splitter;
 mod svf;
-mod voice;
 
 use biquad::{FirstOrderLP, FixedQFilter};
 use envelope::EaseInOutSine;
