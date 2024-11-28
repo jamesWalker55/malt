@@ -49,12 +49,18 @@ impl MultibandGainApplier {
     }
 }
 
+enum EnvelopeOverlapMode {
+    Sum,
+    Max,
+}
+
 struct EnvelopeLane<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> {
     sr: f64,
     latency_seconds: f32,
     voices: [Option<Envelope<A, R>>; VOICES],
     filter: FixedQFilter<FirstOrderLP>,
     smooth: bool,
+    overlap_mode: EnvelopeOverlapMode,
 }
 
 impl<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> EnvelopeLane<A, R, VOICES> {
@@ -64,13 +70,14 @@ impl<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> EnvelopeLane<A
         FixedQFilter::new(1000.0, sr)
     }
 
-    fn new(sr: f64, latency_seconds: f32, smooth: bool) -> Self {
+    fn new(sr: f64, latency_seconds: f32, smooth: bool, overlap_mode: EnvelopeOverlapMode) -> Self {
         Self {
             sr,
             latency_seconds,
             voices: [Self::EMPTY_VOICE; VOICES],
             filter: Self::default_filter(sr),
             smooth,
+            overlap_mode,
         }
     }
 
@@ -143,17 +150,27 @@ impl<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> EnvelopeLane<A
 
     fn tick(&mut self) -> f32 {
         // collect all envelope values into a single value
-        let result = self
-            .voices
-            .iter_mut()
-            .filter_map(|x| match x {
-                Some(voice) => voice.tick(),
-                None => None,
-            })
+        let result = match self.overlap_mode {
             // use `max_by()` to get the highest envelope at this point.
             // if you want the envelopes to stack, use `sum()` instead.
-            .max_by(|a, b| a.total_cmp(b))
-            .unwrap_or(0.0);
+            EnvelopeOverlapMode::Sum => self
+                .voices
+                .iter_mut()
+                .filter_map(|x| match x {
+                    Some(voice) => voice.tick(),
+                    None => None,
+                })
+                .sum::<f32>(),
+            EnvelopeOverlapMode::Max => self
+                .voices
+                .iter_mut()
+                .filter_map(|x| match x {
+                    Some(voice) => voice.tick(),
+                    None => None,
+                })
+                .max_by(|a, b| a.total_cmp(b))
+                .unwrap_or(0.0),
+        };
 
         // remove inactive envelopes
         for cell in &mut self.voices {
@@ -217,9 +234,9 @@ impl Default for Malt {
             )),
             latency_buf_l: AllocRingBuffer::new(1),
             latency_buf_r: AllocRingBuffer::new(1),
-            env_low: EnvelopeLane::new(0.0, 0.0, false),
-            env_mid: EnvelopeLane::new(0.0, 0.0, false),
-            env_high: EnvelopeLane::new(0.0, 0.0, false),
+            env_low: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
+            env_mid: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
+            env_high: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
         }
     }
 }
@@ -500,16 +517,19 @@ impl Plugin for Malt {
             self.sr.into(),
             self.latency_seconds,
             self.params.smoothing.value(),
+            EnvelopeOverlapMode::Max,
         );
         self.env_mid = EnvelopeLane::new(
             self.sr.into(),
             self.latency_seconds,
             self.params.smoothing.value(),
+            EnvelopeOverlapMode::Max,
         );
         self.env_high = EnvelopeLane::new(
             self.sr.into(),
             self.latency_seconds,
             self.params.smoothing.value(),
+            EnvelopeOverlapMode::Max,
         );
     }
 
