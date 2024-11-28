@@ -10,11 +10,6 @@ pub(crate) enum CurveType {
     Hold,
     Curve,
     SCurve,
-    Pulse,
-    Wave,
-    Triangle,
-    Stairs,
-    SmoothStairs,
 }
 
 impl CurveType {
@@ -68,99 +63,6 @@ impl CurveType {
                 }
 
                 ((x - xx) / (p2.x - xx)).powf(pwr) * (p2.y - yy) + yy
-            }
-            Self::Pulse => {
-                let t = (p1.tension.powi(2) * 100.0).floor().max(1.0); // num waves
-
-                if x == p2.x {
-                    return p2.y;
-                }
-
-                let cycle_width = (p2.x - p1.x) / t;
-                let x_in_cycle = (x - p1.x) % cycle_width;
-
-                if x_in_cycle < cycle_width / 2.0 {
-                    if p1.tension >= 0.0 {
-                        p1.y
-                    } else {
-                        p2.y
-                    }
-                } else if p1.tension >= 0.0 {
-                    p2.y
-                } else {
-                    p1.y
-                }
-            }
-            Self::Wave => {
-                let t = 2.0 * ((p1.tension.powi(2) * 100.0).abs() + 1.0).floor() - 1.0; // wave num
-                let amp = (p2.y - p1.y) / 2.0;
-                let vshift = p1.y + amp;
-                let freq = t * 2.0 * C::PI / (2.0 * (p2.x - p1.x));
-                -amp * (freq * (x - p1.x)).cos() + vshift
-            }
-            Self::Triangle => {
-                let tt = 2.0 * ((p1.tension.powi(2) * 100.0).abs() + 1.0).floor() - 1.0; // wave num
-                let amp = p2.y - p1.y;
-                let t = (p2.x - p1.x) * 2.0 / tt;
-                amp * (2.0 * ((x - p1.x) / t - (1.0 / 2.0 + (x - p1.x) / t).floor()).abs()) + p1.y
-            }
-            Self::Stairs => {
-                let t = (p1.tension.powi(2) * 150.0).floor().max(2.0); // num waves
-                let step_size;
-                let step_index;
-                let y_step_size;
-
-                if p1.tension >= 0.0 {
-                    step_size = (p2.x - p1.x) / t;
-                    step_index = ((x - p1.x) / step_size).floor();
-                    y_step_size = (p2.y - p1.y) / (t - 1.0);
-                } else {
-                    step_size = (p2.x - p1.x) / (t - 1.0);
-                    step_index = ((x - p1.x) / step_size).ceil();
-                    y_step_size = (p2.y - p1.y) / t;
-                }
-
-                if x == p2.x {
-                    return p2.y;
-                }
-
-                p1.y + step_index * y_step_size
-            }
-            Self::SmoothStairs => {
-                let pwr = 4;
-                let t = (p1.tension.powi(2) * 150.0).floor().max(1.0); // num waves
-
-                let gx = (p2.x - p1.x) / t; // gridx
-                let gy = (p2.y - p1.y) / t; // gridy
-                let step_index = ((x - p1.x) / gx).floor();
-
-                let xx1 = p1.x + gx * step_index;
-                let xx2 = p1.x + gx * (step_index + 1.0);
-                let xx = (xx1 + xx2) / 2.0;
-
-                let yy1 = p1.y + gy * step_index;
-                let yy2 = p1.y + gy * (step_index + 1.0);
-                let yy = (yy1 + yy2) / 2.0;
-
-                if p1.x == p2.x {
-                    return p2.y;
-                }
-
-                if x < xx && p1.tension >= 0.0 {
-                    return ((x - xx1) / (xx - xx1)).powi(pwr) * (yy - yy1) + yy1;
-                }
-
-                if x < xx && p1.tension < 0.0 {
-                    return -1.0 * ((1.0 - (x - xx1) / (xx - xx1)).powi(pwr) - 1.0) * (yy - yy1)
-                        + yy1;
-                }
-
-                if x >= xx && p1.tension >= 0.0 {
-                    return -1.0 * ((1.0 - (x - xx) / (xx2 - xx)).powi(pwr) - 1.0) * (yy2 - yy)
-                        + yy;
-                }
-
-                ((x - xx) / (xx2 - xx)).powi(pwr) * (yy2 - yy) + yy
             }
         }
     }
