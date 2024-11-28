@@ -6,8 +6,7 @@ mod splitter;
 mod svf;
 
 use biquad::{FirstOrderLP, FixedQFilter};
-use envelope::EaseInOutSine;
-use envelope::EaseInSine;
+use envelope::Curve;
 use envelope::Envelope;
 use nih_plug::prelude::*;
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
@@ -54,17 +53,17 @@ enum EnvelopeOverlapMode {
     Max,
 }
 
-struct EnvelopeLane<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> {
+struct EnvelopeLane<const VOICES: usize> {
     sr: f64,
     latency_seconds: f32,
-    voices: [Option<Envelope<A, R>>; VOICES],
+    voices: [Option<Envelope>; VOICES],
     filter: FixedQFilter<FirstOrderLP>,
     smooth: bool,
     overlap_mode: EnvelopeOverlapMode,
 }
 
-impl<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> EnvelopeLane<A, R, VOICES> {
-    const EMPTY_VOICE: Option<Envelope<A, R>> = None;
+impl<const VOICES: usize> EnvelopeLane<VOICES> {
+    const EMPTY_VOICE: Option<Envelope> = None;
 
     fn default_filter(sr: f64) -> FixedQFilter<FirstOrderLP> {
         FixedQFilter::new(1000.0, sr)
@@ -81,7 +80,7 @@ impl<A: envelope::Curve, R: envelope::Curve, const VOICES: usize> EnvelopeLane<A
         }
     }
 
-    fn add(&mut self, precomp: f32, decay: f32, attack_curve: A, release_curve: R) {
+    fn add(&mut self, precomp: f32, decay: f32, attack_curve: Curve, release_curve: Curve) {
         let env = Envelope::new(
             self.sr as f32,
             self.latency_seconds - precomp,
@@ -205,9 +204,9 @@ pub struct Malt {
     // audio processing stuff:
     splitter_l: MultibandGainApplier,
     splitter_r: MultibandGainApplier,
-    env_low: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
-    env_mid: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
-    env_high: EnvelopeLane<EaseInSine, EaseInOutSine, 8>,
+    env_low: EnvelopeLane<8>,
+    env_mid: EnvelopeLane<8>,
+    env_high: EnvelopeLane<8>,
     latency_buf_l: AllocRingBuffer<f32>,
     latency_buf_r: AllocRingBuffer<f32>,
     // keep track of when parameters get changed:
@@ -633,12 +632,24 @@ impl Plugin for Malt {
                 }
 
                 if let NoteEvent::NoteOn { .. } = event {
-                    self.env_low
-                        .add(low_precomp, low_decay, EaseInSine, EaseInOutSine);
-                    self.env_mid
-                        .add(mid_precomp, mid_decay, EaseInSine, EaseInOutSine);
-                    self.env_high
-                        .add(high_precomp, high_decay, EaseInSine, EaseInOutSine);
+                    self.env_low.add(
+                        low_precomp,
+                        low_decay,
+                        Curve::EaseInSine,
+                        Curve::EaseInOutSine,
+                    );
+                    self.env_mid.add(
+                        mid_precomp,
+                        mid_decay,
+                        Curve::EaseInSine,
+                        Curve::EaseInOutSine,
+                    );
+                    self.env_high.add(
+                        high_precomp,
+                        high_decay,
+                        Curve::EaseInSine,
+                        Curve::EaseInOutSine,
+                    );
                 }
 
                 next_event = ctx.next_event();

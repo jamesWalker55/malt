@@ -2,7 +2,8 @@ use std::f32::consts::PI;
 
 use crate::pattern::Pattern;
 
-pub(crate) struct Envelope<A: Curve, R: Curve> {
+#[derive(Debug)]
+pub(crate) struct Envelope {
     sr: f32,
 
     // I'm storing samples, because the samplerate shouldn't change in the middle of the song
@@ -14,19 +15,19 @@ pub(crate) struct Envelope<A: Curve, R: Curve> {
     release_remaining: f32, // samples
 
     // curves that define this envelope
-    attack_curve: A,
-    release_curve: R,
+    attack_curve: Curve,
+    release_curve: Curve,
 }
 
-impl<A: Curve, R: Curve> Envelope<A, R> {
+impl Envelope {
     /// Arguments are in seconds
     pub(crate) fn new(
         sample_rate: f32,
         delay: f32,
         attack: f32,
         release: f32,
-        attack_curve: A,
-        release_curve: R,
+        attack_curve: Curve,
+        release_curve: Curve,
     ) -> Self {
         // convert seconds to samples
         let delay = sample_rate * delay;
@@ -169,7 +170,7 @@ impl<A: Curve, R: Curve> Envelope<A, R> {
     }
 }
 
-impl<A: Curve + Default, R: Curve + Default> Default for Envelope<A, R> {
+impl Default for Envelope {
     fn default() -> Self {
         Self {
             sr: Default::default(),
@@ -179,42 +180,35 @@ impl<A: Curve + Default, R: Curve + Default> Default for Envelope<A, R> {
             attack_remaining: Default::default(),
             release: Default::default(),
             release_remaining: Default::default(),
-            attack_curve: Default::default(),
-            release_curve: Default::default(),
+            attack_curve: Curve::EaseInSine,
+            release_curve: Curve::EaseInOutSine,
         }
     }
 }
 
 /// This should define a graph that starts from 0.0 to 1.0.
-pub(crate) trait Curve {
+#[derive(Debug)]
+pub(crate) enum Curve {
+    EaseInOutSine,
+    EaseInSine,
+    Pattern(Pattern),
+}
+
+impl Curve {
     /// Range of `x` is 0.0 to 1.0
     ///
     /// Output should be in range 0.0 to 1.0
-    fn get_y(&self, x: f32) -> f32;
-}
-
-#[derive(Default)]
-pub(crate) struct EaseInOutSine;
-
-impl Curve for EaseInOutSine {
     fn get_y(&self, x: f32) -> f32 {
-        // https://easings.net/#easeInOutSine
-        -((PI * x).cos() - 1.0) / 2.0
-    }
-}
-
-#[derive(Default)]
-pub(crate) struct EaseInSine;
-
-impl Curve for EaseInSine {
-    fn get_y(&self, x: f32) -> f32 {
-        // https://easings.net/#easeInOutSine
-        1.0 - ((x * PI) / 2.0).cos()
-    }
-}
-
-impl Curve for Pattern {
-    fn get_y(&self, x: f32) -> f32 {
-        self.get_y_at(x as f64) as f32
+        match self {
+            Curve::EaseInOutSine => {
+                // https://easings.net/#easeInOutSine
+                -((PI * x).cos() - 1.0) / 2.0
+            }
+            Curve::EaseInSine => {
+                // https://easings.net/#easeInOutSine
+                1.0 - ((x * PI) / 2.0).cos()
+            }
+            Curve::Pattern(pattern) => pattern.get_y_at(x as f64) as f32,
+        }
     }
 }
