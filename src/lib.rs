@@ -1,5 +1,6 @@
 mod biquad;
 mod envelope;
+mod gui;
 mod parameter_formatters;
 mod pattern;
 mod splitter;
@@ -9,6 +10,7 @@ use biquad::{FirstOrderLP, FixedQFilter};
 use envelope::Curve;
 use envelope::Envelope;
 use nih_plug::prelude::*;
+use nih_plug_egui::EguiState;
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use splitter::MinimumThreeBand12Slope;
@@ -213,6 +215,11 @@ pub struct Malt {
     latency_seconds: f32,
     latency_samples: usize,
     current_slope: Slope,
+
+    /// The editor state, saved together with the parameter state so the custom scaling can be
+    /// restored.
+    // #[persist = "editor-state"]
+    editor_state: Arc<EguiState>,
 }
 
 #[derive(Enum, PartialEq, Eq)]
@@ -441,6 +448,7 @@ impl Default for Malt {
             env_low: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
             env_mid: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
             env_high: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
+            editor_state: EguiState::from_size(gui::GUI_WIDTH, gui::GUI_HEIGHT),
         }
     }
 }
@@ -737,6 +745,10 @@ impl Plugin for Malt {
         }
 
         ProcessStatus::Normal
+    }
+
+    fn editor(&mut self, async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+        gui::create_gui(self, async_executor)
     }
 }
 

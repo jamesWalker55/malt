@@ -1,5 +1,5 @@
 use super::knob::{Knob, KnobStyle};
-use crate::SaiSampler;
+use crate::Malt;
 use nih_plug::prelude::*;
 use nih_plug_egui::{
     create_egui_editor,
@@ -12,11 +12,10 @@ pub(crate) const GUI_WIDTH: u32 = 651;
 pub(crate) const GUI_HEIGHT: u32 = 391;
 
 pub(crate) fn create_gui(
-    plugin: &mut SaiSampler,
-    _async_executor: AsyncExecutor<SaiSampler>,
+    plugin: &mut Malt,
+    _async_executor: AsyncExecutor<Malt>,
 ) -> Option<Box<dyn Editor>> {
     let params = plugin.params.clone();
-    let peak_meter = plugin.peak_meter.clone();
     create_egui_editor(
         plugin.editor_state.clone(),
         (),
@@ -159,7 +158,7 @@ pub(crate) fn create_gui(
                     ui.label(format!("band_height: {:?}", band_height));
 
                     let knob = Knob::for_param(
-                        &params.gain_reduction,
+                        &params.low_gain,
                         setter,
                         34.0,
                         KnobStyle::Analog {
@@ -170,7 +169,7 @@ pub(crate) fn create_gui(
                     ui.add(knob);
 
                     let knob = Knob::for_param(
-                        &params.release,
+                        &params.low_decay,
                         setter,
                         44.0,
                         KnobStyle::Analog {
@@ -181,7 +180,7 @@ pub(crate) fn create_gui(
                     ui.add(knob);
 
                     let knob = Knob::for_param(
-                        &params.release,
+                        &params.low_decay,
                         setter,
                         15.0,
                         KnobStyle::Donut { line_width: 4.0 },
@@ -192,32 +191,32 @@ pub(crate) fn create_gui(
             // left-side analyser (variable size)
             egui::CentralPanel::default().show(ctx, |ui| {
                 // TODO: Add a proper custom widget instead of reusing a progress bar
-                let peak_meter =
-                    util::gain_to_db(peak_meter.load(std::sync::atomic::Ordering::Relaxed));
-                let peak_meter_text = if peak_meter > util::MINUS_INFINITY_DB {
-                    format!("{peak_meter:.1} dBFS")
-                } else {
-                    String::from("-inf dBFS")
-                };
+                // let peak_meter =
+                //     util::gain_to_db(peak_meter.load(std::sync::atomic::Ordering::Relaxed));
+                // let peak_meter_text = if peak_meter > util::MINUS_INFINITY_DB {
+                //     format!("{peak_meter:.1} dBFS")
+                // } else {
+                //     String::from("-inf dBFS")
+                // };
 
-                let peak_meter_normalized = (peak_meter + 60.0) / 60.0;
-                ui.allocate_space(egui::Vec2::splat(2.0));
-                ui.add(
-                    egui::widgets::ProgressBar::new(peak_meter_normalized).text(peak_meter_text),
-                );
+                // let peak_meter_normalized = (peak_meter + 60.0) / 60.0;
+                // ui.allocate_space(egui::Vec2::splat(2.0));
+                // ui.add(
+                //     egui::widgets::ProgressBar::new(peak_meter_normalized).text(peak_meter_text),
+                // );
 
                 // This is a fancy widget that can get all the information it needs to properly
                 // display and modify the parameter from the parametr itself
                 // It's not yet fully implemented, as the text is missing.
                 ui.label("gain_reduction");
                 ui.add(widgets::ParamSlider::for_param(
-                    &params.gain_reduction,
+                    &params.low_gain,
                     setter,
                 ));
                 ui.label("precomp");
-                ui.add(widgets::ParamSlider::for_param(&params.precomp, setter));
+                ui.add(widgets::ParamSlider::for_param(&params.low_precomp, setter));
                 ui.label("release");
-                ui.add(widgets::ParamSlider::for_param(&params.release, setter));
+                ui.add(widgets::ParamSlider::for_param(&params.low_decay, setter));
                 // ui.label("low_crossover");
                 // ui.add(widgets::ParamSlider::for_param(
                 //     &params.low_crossover,
