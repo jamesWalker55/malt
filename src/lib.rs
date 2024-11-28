@@ -1,5 +1,6 @@
 mod biquad;
 mod envelope;
+mod fir;
 mod oscillator;
 mod parameter_formatters;
 mod pattern;
