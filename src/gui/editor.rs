@@ -8,7 +8,9 @@ use crate::{
 use nih_plug::prelude::*;
 use nih_plug_egui::{
     create_egui_editor,
-    egui::{self, Color32, Image, ImageData, ImageSource, TextStyle, TextureId},
+    egui::{
+        self, Color32, FontFamily, FontId, Image, ImageData, ImageSource, TextStyle, TextureId,
+    },
     widgets,
 };
 use once_cell::sync::OnceCell;
@@ -38,13 +40,22 @@ pub(crate) fn create_gui(
                     "Inter".into(),
                     FontData::from_static(include_bytes!("../../fonts/Inter-Regular.ttf")),
                 );
+                fonts.font_data.insert(
+                    "Inter Bold".into(),
+                    FontData::from_static(include_bytes!("../../fonts/Inter-Bold.ttf")),
+                );
 
                 // Define font priority
                 fonts
                     .families
-                    .get_mut(&FontFamily::Proportional)
-                    .unwrap()
+                    .entry(FontFamily::Proportional)
+                    .or_insert(Default::default())
                     .push("Inter".into());
+                fonts
+                    .families
+                    .entry(FontFamily::Name("bold".into()))
+                    .or_insert(Default::default())
+                    .push("Inter Bold".into());
 
                 ctx.set_fonts(fonts)
             }
@@ -98,7 +109,23 @@ pub(crate) fn create_gui(
                             egui::Vec2::new(0.0, HEADER_HEIGHT),
                             egui::Layout::right_to_left(egui::Align::Center),
                             |ui| {
-                                ui.label("?");
+                                let help_btn = Button::new(
+                                    ButtonContent::Text(
+                                        "?",
+                                        FontId::new(12.0, FontFamily::Name("bold".into())),
+                                    ),
+                                    22.0,
+                                    22.0,
+                                    Color32::WHITE,
+                                    Color32::WHITE,
+                                    Color32::from_white_alpha(128),
+                                    Color32::TRANSPARENT,
+                                    Color32::from_white_alpha(26),
+                                    Color32::from_white_alpha(26),
+                                );
+                                if ui.add(help_btn).clicked() {
+                                    nih_log!("Help!");
+                                }
                                 ui.label("right side:");
                             },
                         );
@@ -199,20 +226,45 @@ pub(crate) fn create_gui(
                     ui.add(knob);
 
                     ui.add(Button::new(
-                        ButtonContent::Text("apple"),
-                        // ButtonContent::Image(egui::include_image!(
-                        //     // r"C:\Users\James\Downloads\ferris.svg"
-                        //     // "../../screenshot.png"
-                        //     "../../checkerboard_32.png"
-                        // )),
-                        32.0,
-                        32.0,
+                        ButtonContent::Image(egui::include_image!("res/power.svg")),
+                        22.0,
+                        22.0,
                         Color32::WHITE,
                         Color32::WHITE,
                         Color32::from_white_alpha(128),
                         Color32::TRANSPARENT,
                         Color32::from_white_alpha(26),
-                        Color32::RED,
+                        Color32::from_white_alpha(26),
+                    ));
+
+                    ui.add(Button::new(
+                        ButtonContent::Text(
+                            "M",
+                            FontId::new(12.0, FontFamily::Name("bold".into())),
+                        ),
+                        22.0,
+                        22.0,
+                        Color32::WHITE,
+                        Color32::WHITE,
+                        Color32::from_white_alpha(128),
+                        Color32::TRANSPARENT,
+                        Color32::from_white_alpha(26),
+                        Color32::from_white_alpha(26),
+                    ));
+
+                    ui.add(Button::new(
+                        ButtonContent::Text(
+                            "S",
+                            FontId::new(12.0, FontFamily::Name("bold".into())),
+                        ),
+                        22.0,
+                        22.0,
+                        Color32::WHITE,
+                        Color32::WHITE,
+                        Color32::from_white_alpha(128),
+                        Color32::TRANSPARENT,
+                        Color32::from_white_alpha(26),
+                        Color32::from_white_alpha(26),
                     ));
 
                     if ui.button("Hello").clicked() {

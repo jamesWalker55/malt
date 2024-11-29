@@ -1,9 +1,10 @@
 use nih_plug_egui::egui::{
-    vec2, Align2, Color32, Image, ImageSource, Response, Sense, TextStyle, Ui, Widget,
+    vec2, Align2, Color32, FontFamily, FontId, Image, ImageSource, Response, Sense, TextStyle, Ui,
+    Widget,
 };
 
 pub(crate) enum ButtonContent {
-    Text(&'static str),
+    Text(&'static str, FontId),
     Image(ImageSource<'static>),
 }
 
@@ -74,9 +75,7 @@ impl Widget for Button {
                 self.text_inactive
             };
             match self.content {
-                ButtonContent::Text(text) => {
-                    // default font if not set in styles
-                    let font_id = TextStyle::Button.resolve(ui.style());
+                ButtonContent::Text(text, font_id) => {
                     painter.text(
                         response.rect.center(),
                         Align2::CENTER_CENTER,
