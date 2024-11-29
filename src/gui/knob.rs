@@ -1,6 +1,6 @@
 use nih_plug::prelude::{Param, ParamSetter};
 use nih_plug_egui::egui::{
-    epaint::{CircleShape, PathShape},
+    epaint::{CircleShape, PathShape, PathStroke},
     pos2, Color32, Pos2, Response, Sense, Shape, Stroke, Ui, Vec2, Widget,
 };
 use std::{
@@ -157,9 +157,9 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
                                 0.2,
                             ),
                             closed: false,
-                            fill: Color32::TRANSPARENT,
+                            fill: Default::default(),
                             // improve rendering by making outline overlap with knob center a bit
-                            stroke: Stroke::new(line_width + 2.0, Self::BG_COLOR),
+                            stroke: PathStroke::new(line_width + 2.0, Self::BG_COLOR),
                         });
                         painter.add(shape);
                     }
@@ -177,9 +177,9 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
                                 0.2,
                             ),
                             closed: false,
-                            fill: Color32::TRANSPARENT,
+                            fill: Default::default(),
                             // improve rendering by making outline overlap with knob center a bit
-                            stroke: Stroke::new(line_width + 2.0, *highlight_color),
+                            stroke: PathStroke::new(line_width + 2.0, *highlight_color),
                         });
                         painter.add(shape);
                     }
@@ -219,8 +219,8 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
                         let line_shape = Shape::Path(PathShape {
                             points: vec![start_point, end_point],
                             closed: false,
-                            fill: Self::LINE_COLOR,
-                            stroke: Stroke::new(*line_width, Self::LINE_COLOR),
+                            fill: Default::default(),
+                            stroke: PathStroke::new(*line_width, Self::LINE_COLOR),
                         });
                         painter.add(line_shape);
 
@@ -267,8 +267,8 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
                                 0.2,
                             ),
                             closed: false,
-                            fill: Color32::TRANSPARENT,
-                            stroke: Stroke::new(*line_width, Self::BG_COLOR),
+                            fill: Default::default(),
+                            stroke: PathStroke::new(*line_width, Self::BG_COLOR),
                         });
                         painter.add(shape);
                     }
@@ -285,9 +285,9 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
                                 0.2,
                             ),
                             closed: false,
-                            fill: Color32::TRANSPARENT,
+                            fill: Default::default(),
                             // improve rendering by making outline overlap with knob center a bit
-                            stroke: Stroke::new(*line_width, Self::LINE_COLOR),
+                            stroke: PathStroke::new(*line_width, Self::LINE_COLOR),
                         });
                         painter.add(shape);
                     }
