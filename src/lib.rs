@@ -16,7 +16,7 @@ use ringbuffer::{AllocRingBuffer, RingBuffer};
 use splitter::MinimumThreeBand12Slope;
 use splitter::MinimumThreeBand24Slope;
 use std::sync::Arc;
-use util::{db_to_gain, gain_to_db};
+use util::db_to_gain;
 
 const CROSSOVER_MIN_HZ: f32 = 10.0;
 const CROSSOVER_MAX_HZ: f32 = 20000.0;
@@ -55,43 +55,82 @@ enum EnvelopeOverlapMode {
     Max,
 }
 
-struct EnvelopeLane<const VOICES: usize> {
-    sr: f64,
-    latency_seconds: f32,
-    voices: [Option<Envelope>; VOICES],
-    filter: FixedQFilter<FirstOrderLP>,
+struct BandLinkedVoice {
+    channel: u8,
+    low: Envelope,
+    mid: Envelope,
+    high: Envelope,
+    low_db: f32,
+    mid_db: f32,
+    high_db: f32,
+}
+
+impl BandLinkedVoice {
+    fn set_release(&mut self, low_release: f32, mid_release: f32, high_release: f32) {
+        self.low.set_release(low_release);
+        self.mid.set_release(mid_release);
+        self.high.set_release(high_release);
+    }
+
+    /// Returns the lowest progress of all the envelopes
+    fn progress(&self) -> f32 {
+        self.low
+            .progress()
+            .min(self.mid.progress())
+            .min(self.high.progress())
+    }
+
+    fn is_complete(&self) -> bool {
+        self.low.is_complete() && self.mid.is_complete() && self.high.is_complete()
+    }
+
+    /// This expects scalars 0.0 -- 1.0 as input.
+    fn set_db_gains(&mut self, low_db: f32, mid_db: f32, high_db: f32) {
+        self.low_db = low_db;
+        self.mid_db = mid_db;
+        self.high_db = high_db;
+    }
+
+    // /// Return the gain in dB of each envelope (is negative, e.g. -24dB)
+    // fn tick(&mut self) -> [Option<f32>; 3] {
+    //     [
+    //         self.low.tick().map(|x| x * self.low_gain),
+    //         self.mid.tick().map(|x| x * self.mid_gain),
+    //         self.high.tick().map(|x| x * self.high_gain),
+    //     ]
+    // }
+}
+
+struct BandLinkedEnvelopeLanes<const VOICES: usize> {
+    // sr: f64,
+    // latency_seconds: f32,
+    voices: [Option<BandLinkedVoice>; VOICES],
+    filter_l: FixedQFilter<FirstOrderLP>,
+    filter_m: FixedQFilter<FirstOrderLP>,
+    filter_h: FixedQFilter<FirstOrderLP>,
     smooth: bool,
     overlap_mode: EnvelopeOverlapMode,
 }
 
-impl<const VOICES: usize> EnvelopeLane<VOICES> {
-    const EMPTY_VOICE: Option<Envelope> = None;
+impl<const VOICES: usize> BandLinkedEnvelopeLanes<VOICES> {
+    const EMPTY_VOICE: Option<BandLinkedVoice> = None;
 
     fn default_filter(sr: f64) -> FixedQFilter<FirstOrderLP> {
         FixedQFilter::new(1000.0, sr)
     }
 
-    fn new(sr: f64, latency_seconds: f32, smooth: bool, overlap_mode: EnvelopeOverlapMode) -> Self {
+    fn new(sr: f64, smooth: bool, overlap_mode: EnvelopeOverlapMode) -> Self {
         Self {
-            sr,
-            latency_seconds,
             voices: [Self::EMPTY_VOICE; VOICES],
-            filter: Self::default_filter(sr),
+            filter_l: Self::default_filter(sr),
+            filter_m: Self::default_filter(sr),
+            filter_h: Self::default_filter(sr),
             smooth,
             overlap_mode,
         }
     }
 
-    fn add(&mut self, precomp: f32, decay: f32, attack_curve: Curve, release_curve: Curve) {
-        let env = Envelope::new(
-            self.sr as f32,
-            self.latency_seconds - precomp,
-            precomp,
-            decay,
-            attack_curve,
-            release_curve,
-        );
-
+    fn add(&mut self, voice: BandLinkedVoice) {
         let insertion_idx = {
             // insert into an empty cell
             match self.voices.iter().position(|x| x.is_none()) {
@@ -115,62 +154,71 @@ impl<const VOICES: usize> EnvelopeLane<VOICES> {
             }
         };
 
-        self.voices[insertion_idx] = Some(env);
+        self.voices[insertion_idx] = Some(voice);
     }
 
-    fn set_release(&mut self, release: f32) {
+    fn set_release(&mut self, channel: u8, low_release: f32, mid_release: f32, high_release: f32) {
         for voice in &mut self.voices {
             let Some(voice) = voice else {
                 continue;
             };
+            if voice.channel != channel {
+                continue;
+            }
 
-            voice.set_release(release);
+            voice.set_release(low_release, mid_release, high_release);
         }
     }
 
-    fn set_smooth(&mut self, smooth: bool) {
+    fn set_smooth(&mut self, sr: f64, smooth: bool) {
         if smooth == self.smooth {
             return;
         }
 
         self.smooth = smooth;
         // reset filter to avoid pops and clicks
-        self.filter = Self::default_filter(self.sr);
+        self.filter_l = Self::default_filter(sr);
+        self.filter_m = Self::default_filter(sr);
+        self.filter_h = Self::default_filter(sr);
     }
 
-    /// Latency shouldn't be automatable.
-    /// For voices that already exist, just leave them as is (with original latency)
-    /// I can't be arsed to implement latency adjustment for envelopes
-    fn set_latency_seconds(&mut self, latency_seconds: f32) {
-        if latency_seconds == self.latency_seconds {
-            return;
-        }
+    /// Return the gain as scalars for each envelope (in range 0.0 -- 1.0)
+    fn tick(&mut self) -> [f32; 3] {
+        let low_db: f32 = {
+            let iter = self.voices.iter_mut().filter_map(|voice| {
+                voice
+                    .as_mut()
+                    .map(|voice| voice.low.tick().unwrap_or_default() * voice.low_db)
+            });
 
-        self.latency_seconds = latency_seconds;
-    }
+            match self.overlap_mode {
+                EnvelopeOverlapMode::Sum => iter.sum(),
+                EnvelopeOverlapMode::Max => iter.max_by(|a, b| a.total_cmp(b)).unwrap_or(0.0),
+            }
+        };
+        let mid_db: f32 = {
+            let iter = self.voices.iter_mut().filter_map(|voice| {
+                voice
+                    .as_mut()
+                    .map(|voice| voice.mid.tick().unwrap_or_default() * voice.mid_db)
+            });
 
-    fn tick(&mut self) -> f32 {
-        // collect all envelope values into a single value
-        let result = match self.overlap_mode {
-            // use `max_by()` to get the highest envelope at this point.
-            // if you want the envelopes to stack, use `sum()` instead.
-            EnvelopeOverlapMode::Sum => self
-                .voices
-                .iter_mut()
-                .filter_map(|x| match x {
-                    Some(voice) => voice.tick(),
-                    None => None,
-                })
-                .sum::<f32>(),
-            EnvelopeOverlapMode::Max => self
-                .voices
-                .iter_mut()
-                .filter_map(|x| match x {
-                    Some(voice) => voice.tick(),
-                    None => None,
-                })
-                .max_by(|a, b| a.total_cmp(b))
-                .unwrap_or(0.0),
+            match self.overlap_mode {
+                EnvelopeOverlapMode::Sum => iter.sum(),
+                EnvelopeOverlapMode::Max => iter.max_by(|a, b| a.total_cmp(b)).unwrap_or(0.0),
+            }
+        };
+        let high_db: f32 = {
+            let iter = self.voices.iter_mut().filter_map(|voice| {
+                voice
+                    .as_mut()
+                    .map(|voice| voice.high.tick().unwrap_or_default() * voice.high_db)
+            });
+
+            match self.overlap_mode {
+                EnvelopeOverlapMode::Sum => iter.sum(),
+                EnvelopeOverlapMode::Max => iter.max_by(|a, b| a.total_cmp(b)).unwrap_or(0.0),
+            }
         };
 
         // remove inactive envelopes
@@ -190,11 +238,19 @@ impl<const VOICES: usize> EnvelopeLane<VOICES> {
             *cell = None;
         }
 
-        if !self.smooth {
-            return result;
-        }
+        let low = db_to_gain(-low_db);
+        let mid = db_to_gain(-mid_db);
+        let high = db_to_gain(-high_db);
 
-        self.filter.process_sample(result as f64) as f32
+        if !self.smooth {
+            [low, mid, high]
+        } else {
+            let low = self.filter_l.process_sample(low as f64) as f32;
+            let mid = self.filter_m.process_sample(mid as f64) as f32;
+            let high = self.filter_h.process_sample(high as f64) as f32;
+
+            [low, mid, high]
+        }
     }
 }
 
@@ -206,9 +262,7 @@ pub struct Malt {
     // audio processing stuff:
     splitter_l: MultibandGainApplier,
     splitter_r: MultibandGainApplier,
-    env_low: EnvelopeLane<8>,
-    env_mid: EnvelopeLane<8>,
-    env_high: EnvelopeLane<8>,
+    env: BandLinkedEnvelopeLanes<64>,
     latency_buf_l: AllocRingBuffer<f32>,
     latency_buf_r: AllocRingBuffer<f32>,
     // keep track of when parameters get changed:
@@ -234,27 +288,8 @@ enum Slope {
 
 #[derive(Params)]
 struct MaltParams {
-    #[id = "low_precomp"]
-    pub(crate) low_precomp: FloatParam,
-    #[id = "mid_precomp"]
-    pub(crate) mid_precomp: FloatParam,
-    #[id = "high_precomp"]
-    pub(crate) high_precomp: FloatParam,
-
-    #[id = "low_decay"]
-    pub(crate) low_decay: FloatParam,
-    #[id = "mid_decay"]
-    pub(crate) mid_decay: FloatParam,
-    #[id = "high_decay"]
-    pub(crate) high_decay: FloatParam,
-
-    // gain is scalar, 0.0 -- 1.0
-    #[id = "low_gain"]
-    pub(crate) low_gain: FloatParam,
-    #[id = "mid_gain"]
-    pub(crate) mid_gain: FloatParam,
-    #[id = "high_gain"]
-    pub(crate) high_gain: FloatParam,
+    #[nested(array, group = "channels")]
+    pub channels: [ChannelParams; 16],
 
     #[id = "low_crossover"]
     pub(crate) low_crossover: FloatParam,
@@ -276,6 +311,130 @@ struct MaltParams {
 }
 
 impl Default for MaltParams {
+    fn default() -> Self {
+        Self {
+            channels: Default::default(),
+
+            low_crossover: FloatParam::new(
+                "Low crossover",
+                120.0,
+                FloatRange::Skewed {
+                    min: CROSSOVER_MIN_HZ,
+                    max: CROSSOVER_MAX_HZ,
+                    factor: FloatRange::skew_factor(-2.0),
+                },
+            )
+            .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
+            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
+            high_crossover: FloatParam::new(
+                "High crossover",
+                2500.0,
+                FloatRange::Skewed {
+                    min: CROSSOVER_MIN_HZ,
+                    max: CROSSOVER_MAX_HZ,
+                    factor: FloatRange::skew_factor(-2.0),
+                },
+            )
+            .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
+            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
+
+            crossover_slope: EnumParam::new("Crossover slope", Slope::F24),
+            smoothing: BoolParam::new("Smoothing", true),
+            lookahead: FloatParam::new(
+                "Lookahead",
+                10.0,
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: MAX_LATENCY_SECONDS * 1000.0,
+                },
+            )
+            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_string_to_value(s2v_f32_ms_then_s())
+            .non_automatable(),
+
+            bypass: BoolParam::new("Bypass", false),
+            mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_value_to_string(formatters::v2s_f32_percentage(3))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
+        }
+    }
+}
+
+impl MaltParams {
+    fn next(&self) -> MaltParamsValues {
+        let low_crossover = {
+            let value = self.low_crossover.smoothed.next();
+            // since high crossover will be 1 octave above this, this cannot be too high
+            value.min(CROSSOVER_MAX_HZ / 2.0)
+        };
+        let high_crossover = {
+            // limit high crossover to be 1 octave above low crossover
+            // (this is pro-mb's behaviour)
+            let value = self.high_crossover.smoothed.next();
+            let min_value = low_crossover * 2.0;
+            value.max(min_value)
+        };
+
+        let crossover_slope = self.crossover_slope.value();
+        let smoothing = self.smoothing.value();
+        let lookahead = self.lookahead.value() / 1000.0; // convert to seconds
+        let bypass = self.bypass.value();
+        let mix = self.mix.smoothed.next();
+
+        let channels: [ChannelParamValues; 16] =
+            self.channels.each_ref().map(|param| param.next(lookahead));
+
+        MaltParamsValues {
+            channels,
+            low_crossover,
+            high_crossover,
+            crossover_slope,
+            smoothing,
+            lookahead,
+            bypass,
+            mix,
+        }
+    }
+}
+
+struct MaltParamsValues {
+    channels: [ChannelParamValues; 16],
+    low_crossover: f32,
+    high_crossover: f32,
+    crossover_slope: Slope,
+    smoothing: bool,
+    /// in seconds
+    lookahead: f32,
+    bypass: bool,
+    mix: f32,
+}
+
+#[derive(Params)]
+struct ChannelParams {
+    #[id = "low_precomp"]
+    pub(crate) low_precomp: FloatParam,
+    #[id = "mid_precomp"]
+    pub(crate) mid_precomp: FloatParam,
+    #[id = "high_precomp"]
+    pub(crate) high_precomp: FloatParam,
+
+    #[id = "low_decay"]
+    pub(crate) low_decay: FloatParam,
+    #[id = "mid_decay"]
+    pub(crate) mid_decay: FloatParam,
+    #[id = "high_decay"]
+    pub(crate) high_decay: FloatParam,
+
+    // gain, 0.0 -- 90.0
+    #[id = "low_db"]
+    pub(crate) low_db: FloatParam,
+    #[id = "mid_db"]
+    pub(crate) mid_db: FloatParam,
+    #[id = "high_db"]
+    pub(crate) high_db: FloatParam,
+}
+
+impl Default for ChannelParams {
     fn default() -> Self {
         Self {
             low_precomp: FloatParam::new(
@@ -346,85 +505,99 @@ impl Default for MaltParams {
             .with_value_to_string(v2s_f32_ms_then_s(3))
             .with_string_to_value(s2v_f32_ms_then_s()),
 
-            low_gain: FloatParam::new(
+            low_db: FloatParam::new(
                 "Low gain reduction",
                 db_to_gain(-30.0),
-                FloatRange::Skewed {
-                    min: 0.0,
-                    max: 1.0,
-                    factor: FloatRange::skew_factor(-1.2),
-                },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-            mid_gain: FloatParam::new(
-                "Mid gain reduction",
-                db_to_gain(-30.0),
-                FloatRange::Skewed {
-                    min: 0.0,
-                    max: 1.0,
-                    factor: FloatRange::skew_factor(-1.2),
-                },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-            high_gain: FloatParam::new(
-                "High gain reduction",
-                db_to_gain(-30.0),
-                FloatRange::Skewed {
-                    min: 0.0,
-                    max: 1.0,
-                    factor: FloatRange::skew_factor(-1.2),
-                },
-            )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-
-            low_crossover: FloatParam::new(
-                "Low crossover",
-                120.0,
-                FloatRange::Skewed {
-                    min: CROSSOVER_MIN_HZ,
-                    max: CROSSOVER_MAX_HZ,
-                    factor: FloatRange::skew_factor(-2.0),
-                },
-            )
-            .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
-            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
-            high_crossover: FloatParam::new(
-                "High crossover",
-                2500.0,
-                FloatRange::Skewed {
-                    min: CROSSOVER_MIN_HZ,
-                    max: CROSSOVER_MAX_HZ,
-                    factor: FloatRange::skew_factor(-2.0),
-                },
-            )
-            .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
-            .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
-
-            crossover_slope: EnumParam::new("Crossover slope", Slope::F24),
-            smoothing: BoolParam::new("Smoothing", true),
-            lookahead: FloatParam::new(
-                "Lookahead",
-                10.0,
                 FloatRange::Linear {
                     min: 0.0,
-                    max: MAX_LATENCY_SECONDS * 1000.0,
+                    max: 90.0,
                 },
             )
-            .with_value_to_string(v2s_f32_ms_then_s(3))
-            .with_string_to_value(s2v_f32_ms_then_s()),
-
-            bypass: BoolParam::new("Bypass", false),
-            mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
-                .with_value_to_string(formatters::v2s_f32_percentage(3))
-                .with_string_to_value(formatters::s2v_f32_percentage()),
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            mid_db: FloatParam::new(
+                "Mid gain reduction",
+                db_to_gain(-30.0),
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 90.0,
+                },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            high_db: FloatParam::new(
+                "High gain reduction",
+                db_to_gain(-30.0),
+                FloatRange::Linear {
+                    min: 0.0,
+                    max: 90.0,
+                },
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
+            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
         }
     }
+}
+
+impl ChannelParams {
+    fn next(&self, latency_seconds: f32) -> ChannelParamValues {
+        let low_precomp = {
+            let value = self.low_precomp.smoothed.next() / 1000.0;
+            value.min(latency_seconds)
+        };
+        let mid_precomp = {
+            let value = self.mid_precomp.smoothed.next() / 1000.0;
+            value.min(latency_seconds)
+        };
+        let high_precomp = {
+            let value = self.high_precomp.smoothed.next() / 1000.0;
+            value.min(latency_seconds)
+        };
+        let low_decay = self.low_decay.smoothed.next() / 1000.0;
+        let mid_decay = self.mid_decay.smoothed.next() / 1000.0;
+        let high_decay = self.high_decay.smoothed.next() / 1000.0;
+        let low_db = self.low_db.smoothed.next();
+        let mid_db = self.mid_db.smoothed.next();
+        let high_db = self.high_db.smoothed.next();
+
+        ChannelParamValues {
+            low_precomp,
+            mid_precomp,
+            high_precomp,
+            low_decay,
+            mid_decay,
+            high_decay,
+            low_db,
+            mid_db,
+            high_db,
+        }
+    }
+}
+
+pub(crate) struct ChannelParamValues {
+    /// Precomp is in seconds
+    pub(crate) low_precomp: f32,
+    /// Precomp is in seconds
+    pub(crate) mid_precomp: f32,
+    /// Precomp is in seconds
+    pub(crate) high_precomp: f32,
+
+    /// Decay is in seconds
+    pub(crate) low_decay: f32,
+    /// Decay is in seconds
+    pub(crate) mid_decay: f32,
+    /// Decay is in seconds
+    pub(crate) high_decay: f32,
+
+    /// Gain in dB, 0.0 -- +90.0
+    pub(crate) low_db: f32,
+    /// Gain in dB, 0.0 -- +90.0
+    pub(crate) mid_db: f32,
+    /// Gain in dB, 0.0 -- +90.0
+    pub(crate) high_db: f32,
 }
 
 impl Default for Malt {
@@ -445,9 +618,7 @@ impl Default for Malt {
             )),
             latency_buf_l: AllocRingBuffer::new(1),
             latency_buf_r: AllocRingBuffer::new(1),
-            env_low: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
-            env_mid: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
-            env_high: EnvelopeLane::new(0.0, 0.0, false, EnvelopeOverlapMode::Max),
+            env: BandLinkedEnvelopeLanes::new(0.0, false, EnvelopeOverlapMode::Max),
             editor_state: EguiState::from_size(gui::GUI_WIDTH, gui::GUI_HEIGHT),
         }
     }
@@ -520,21 +691,8 @@ impl Plugin for Malt {
         ));
 
         // clear envelope
-        self.env_low = EnvelopeLane::new(
+        self.env = BandLinkedEnvelopeLanes::new(
             self.sr.into(),
-            self.latency_seconds,
-            self.params.smoothing.value(),
-            EnvelopeOverlapMode::Max,
-        );
-        self.env_mid = EnvelopeLane::new(
-            self.sr.into(),
-            self.latency_seconds,
-            self.params.smoothing.value(),
-            EnvelopeOverlapMode::Max,
-        );
-        self.env_high = EnvelopeLane::new(
-            self.sr.into(),
-            self.latency_seconds,
             self.params.smoothing.value(),
             EnvelopeOverlapMode::Max,
         );
@@ -547,165 +705,134 @@ impl Plugin for Malt {
         ctx: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
         debug_assert_eq!(buffer.channels(), 2);
-        // handle if latency has changed
-        {
-            let new_lookahread = self.params.lookahead.value() / 1000.0;
-            if new_lookahread != self.latency_seconds {
-                self.latency_seconds = new_lookahread;
-                self.latency_samples = (new_lookahread * self.sr).round() as usize;
-                ctx.set_latency_samples(self.latency_samples as u32);
-
-                // update latency for envelopes
-                self.env_low.set_latency_seconds(self.latency_seconds);
-                self.env_mid.set_latency_seconds(self.latency_seconds);
-                self.env_high.set_latency_seconds(self.latency_seconds);
-            }
-        }
-        // handle crossover slope change
-        {
-            let new_slope = self.params.crossover_slope.value();
-            if new_slope != self.current_slope {
-                // replace splitters with new slopes
-                self.current_slope = new_slope;
-                match self.current_slope {
-                    Slope::F24 => {
-                        self.splitter_l = MultibandGainApplier::ThreeBand24(
-                            MinimumThreeBand24Slope::new(1000.0, 2000.0, self.sr.into()),
-                        );
-                        self.splitter_r = MultibandGainApplier::ThreeBand24(
-                            MinimumThreeBand24Slope::new(1000.0, 2000.0, self.sr.into()),
-                        );
-                    }
-                    Slope::F12 => {
-                        self.splitter_l = MultibandGainApplier::ThreeBand12(
-                            MinimumThreeBand12Slope::new(1000.0, 2000.0, self.sr.into()),
-                        );
-                        self.splitter_r = MultibandGainApplier::ThreeBand12(
-                            MinimumThreeBand12Slope::new(1000.0, 2000.0, self.sr.into()),
-                        );
-                    }
-                }
-            }
-        }
-        // handle smoothing change
-        {
-            let smoothing = self.params.smoothing.value();
-            self.env_low.set_smooth(smoothing);
-            self.env_mid.set_smooth(smoothing);
-            self.env_high.set_smooth(smoothing);
-        }
-
-        let bypass = self.params.bypass.value();
 
         let mut next_event = ctx.next_event();
 
         for (sample_id, mut channel_samples) in buffer.iter_samples().enumerate() {
-            // update params
-            let low_precomp = {
-                let value = self.params.low_precomp.smoothed.next() / 1000.0;
-                value.min(self.latency_seconds)
-            };
-            let mid_precomp = {
-                let value = self.params.mid_precomp.smoothed.next() / 1000.0;
-                value.min(self.latency_seconds)
-            };
-            let high_precomp = {
-                let value = self.params.high_precomp.smoothed.next() / 1000.0;
-                value.min(self.latency_seconds)
-            };
-            let low_decay = self.params.low_decay.smoothed.next() / 1000.0;
-            let mid_decay = self.params.mid_decay.smoothed.next() / 1000.0;
-            let high_decay = self.params.high_decay.smoothed.next() / 1000.0;
-            let low_max_gain_db = -gain_to_db(self.params.low_gain.smoothed.next());
-            let mid_max_gain_db = -gain_to_db(self.params.mid_gain.smoothed.next());
-            let high_max_gain_db = -gain_to_db(self.params.high_gain.smoothed.next());
-            let low_crossover = {
-                let value = self.params.low_crossover.smoothed.next();
-                // since high crossover will be 1 octave above this, this cannot be too high
-                value.min(CROSSOVER_MAX_HZ / 2.0)
-            };
-            let high_crossover = {
-                // limit high crossover to be 1 octave above low crossover
-                // (this is pro-mb's behaviour)
-                let value = self.params.high_crossover.smoothed.next();
-                let min_value = low_crossover * 2.0;
-                value.max(min_value)
-            };
-            let mix = self.params.mix.smoothed.next();
+            let params = self.params.next();
+            let sample_rate = ctx.transport().sample_rate;
+
+            // handle if latency has changed
+            {
+                let lookahead_samples = params.lookahead * ctx.transport().sample_rate;
+                // update latency for daw, is no-op if value is same
+                ctx.set_latency_samples(lookahead_samples.round() as u32);
+            }
+
+            // handle crossover slope change
+            {
+                if params.crossover_slope != self.current_slope {
+                    // replace splitters with new slopes
+                    self.current_slope = params.crossover_slope;
+                    match self.current_slope {
+                        Slope::F24 => {
+                            self.splitter_l = MultibandGainApplier::ThreeBand24(
+                                MinimumThreeBand24Slope::new(1000.0, 2000.0, sample_rate.into()),
+                            );
+                            self.splitter_r = MultibandGainApplier::ThreeBand24(
+                                MinimumThreeBand24Slope::new(1000.0, 2000.0, sample_rate.into()),
+                            );
+                        }
+                        Slope::F12 => {
+                            self.splitter_l = MultibandGainApplier::ThreeBand12(
+                                MinimumThreeBand12Slope::new(1000.0, 2000.0, sample_rate.into()),
+                            );
+                            self.splitter_r = MultibandGainApplier::ThreeBand12(
+                                MinimumThreeBand12Slope::new(1000.0, 2000.0, sample_rate.into()),
+                            );
+                        }
+                    }
+                }
+            }
+
+            // handle smoothing change
+            self.env.set_smooth(sample_rate as f64, params.smoothing);
 
             // handle MIDI events
+            let mut channel_triggered: [bool; 16] = [false; 16];
             while let Some(event) = next_event {
                 if event.timing() != sample_id as u32 {
                     break;
                 }
 
-                if let NoteEvent::NoteOn { .. } = event {
-                    self.env_low.add(
-                        low_precomp,
-                        low_decay,
-                        Curve::EaseInSine,
-                        Curve::EaseInOutSine,
-                    );
-                    self.env_mid.add(
-                        mid_precomp,
-                        mid_decay,
-                        Curve::EaseInSine,
-                        Curve::EaseInOutSine,
-                    );
-                    self.env_high.add(
-                        high_precomp,
-                        high_decay,
-                        Curve::EaseInSine,
-                        Curve::EaseInOutSine,
-                    );
+                if let NoteEvent::NoteOn { channel, .. } = event {
+                    channel_triggered[channel as usize] = true;
                 }
 
                 next_event = ctx.next_event();
             }
 
             // update existing envelopes (if any)
-            self.env_low.set_release(low_decay);
-            self.env_mid.set_release(mid_decay);
-            self.env_high.set_release(high_decay);
+            for (channel, values) in params.channels.iter().enumerate() {
+                self.env.set_release(
+                    channel as u8,
+                    values.low_decay,
+                    values.mid_decay,
+                    values.high_decay,
+                );
+            }
+
+            // trigger notes in envelope
+            for (channel, triggered) in channel_triggered.iter().enumerate() {
+                if !triggered {
+                    continue;
+                }
+
+                self.env.add(BandLinkedVoice {
+                    channel: channel as u8,
+                    low: Envelope::from_latency(
+                        sample_rate,
+                        params.lookahead,
+                        params.channels[channel].low_precomp,
+                        params.channels[channel].low_decay,
+                        Curve::EaseInSine,
+                        Curve::EaseInOutSine,
+                    ),
+                    mid: Envelope::from_latency(
+                        sample_rate,
+                        params.lookahead,
+                        params.channels[channel].mid_precomp,
+                        params.channels[channel].mid_decay,
+                        Curve::EaseInSine,
+                        Curve::EaseInOutSine,
+                    ),
+                    high: Envelope::from_latency(
+                        sample_rate,
+                        params.lookahead,
+                        params.channels[channel].high_precomp,
+                        params.channels[channel].high_decay,
+                        Curve::EaseInSine,
+                        Curve::EaseInOutSine,
+                    ),
+                    low_db: params.channels[channel].low_db,
+                    mid_db: params.channels[channel].mid_db,
+                    high_db: params.channels[channel].high_db,
+                });
+            }
 
             // update filter frequency
             self.splitter_l
-                .set_frequencies(low_crossover.into(), high_crossover.into());
+                .set_frequencies(params.low_crossover.into(), params.high_crossover.into());
             self.splitter_r
-                .set_frequencies(low_crossover.into(), high_crossover.into());
+                .set_frequencies(params.low_crossover.into(), params.high_crossover.into());
 
             #[inline(always)]
-            fn calculate_final_gain(env_val: f64, max_gain_db: f64, mix: f64, bypass: bool) -> f64 {
+            fn calculate_final_gain(gain: f32, mix: f32, bypass: bool) -> f64 {
                 if bypass {
                     1.0
                 } else {
-                    let new_gain = db_to_gain(-(max_gain_db * env_val) as f32) as f64;
                     // mix should operate scalar-wise, not in dB units
                     // i.e. don't put `mix` inside the `db_to_gain` function
-                    mix * (new_gain - 1.0) + 1.0
+                    mix as f64 * (gain as f64 - 1.0) + 1.0
                 }
             }
 
             // tick envelopes and get gain value
             // we intentionally always call envelope's `tick()` even when bypassed:
-            let low_gain = calculate_final_gain(
-                self.env_low.tick() as f64,
-                low_max_gain_db as f64,
-                mix as f64,
-                bypass,
-            ) as f64;
-            let mid_gain = calculate_final_gain(
-                self.env_mid.tick() as f64,
-                mid_max_gain_db as f64,
-                mix as f64,
-                bypass,
-            ) as f64;
-            let high_gain = calculate_final_gain(
-                self.env_high.tick() as f64,
-                high_max_gain_db as f64,
-                mix as f64,
-                bypass,
-            ) as f64;
+            let [low_gain, mid_gain, high_gain] = self.env.tick();
+            let low_gain = calculate_final_gain(low_gain, params.mix, params.bypass);
+            let mid_gain = calculate_final_gain(mid_gain, params.mix, params.bypass);
+            let high_gain = calculate_final_gain(high_gain, params.mix, params.bypass);
 
             let latency_buf_offset = self.max_latency_samples - self.latency_samples;
 

@@ -47,6 +47,24 @@ impl Envelope {
         }
     }
 
+    pub(crate) fn from_latency(
+        sr: f32,
+        latency_seconds: f32,
+        precomp: f32,
+        decay: f32,
+        attack_curve: Curve,
+        release_curve: Curve,
+    ) -> Self {
+        Self::new(
+            sr,
+            latency_seconds - precomp,
+            precomp,
+            decay,
+            attack_curve,
+            release_curve,
+        )
+    }
+
     // This method is not recommended!
     // If you have a multiband setup, where each band has a different attack speed,
     // this may only update some bands' attack and not other bands.
