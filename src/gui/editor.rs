@@ -66,7 +66,8 @@ pub(crate) fn create_gui(
 
                 // color styling
                 style.visuals.panel_fill = Color32::from_rgb(48, 48, 48);
-                // style.wid
+
+                style.interaction.selectable_labels = false;
 
                 ctx.set_style(style);
             }
