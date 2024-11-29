@@ -17,8 +17,10 @@ crate-type = ["cdylib", "lib"]
 arrayvec = "0.7.4"
 # Remove the `assert_process_allocs` feature to allow allocations on the audio
 # thread in debug builds.
-nih_plug = { git = "https://github.com/jamesWalker55/nih-plug.git", rev = "5190341256d42e805f3f0290bececd8d912d2b59", features = ["assert_process_allocs", "standalone"] }
-nih_plug_egui = { git = "https://github.com/jamesWalker55/nih-plug.git", rev = "5190341256d42e805f3f0290bececd8d912d2b59" }
+nih_plug = { git = "https://github.com/jamesWalker55/nih-plug.git", rev = "3a7a39a3ffeb7ab529a79b8f1eb5c2fae3ebb375", features = ["assert_process_allocs", "standalone"] }
+nih_plug_egui = { git = "https://github.com/jamesWalker55/nih-plug.git", rev = "3a7a39a3ffeb7ab529a79b8f1eb5c2fae3ebb375" }
+egui_extras = { version = "0.29.0", features = ["all_loaders"] }
+image = { version = "0.25", features = ["png"] } # Add the types you want support for
 once_cell = "1.19.0"
 ringbuffer = "0.15.0"
 thiserror = "1.0.63"

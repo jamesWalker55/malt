@@ -1,15 +1,22 @@
+use std::cell::LazyCell;
+
 use super::knob::{Knob, KnobStyle};
-use crate::Malt;
+use crate::{
+    gui::button::{Button, ButtonContent},
+    Malt,
+};
 use nih_plug::prelude::*;
 use nih_plug_egui::{
     create_egui_editor,
-    egui::{self, Color32, TextStyle},
+    egui::{self, Color32, Image, ImageData, ImageSource, TextStyle, TextureId},
     widgets,
 };
+use once_cell::sync::OnceCell;
 
 // the DPI-independent size of the window
 pub(crate) const GUI_WIDTH: u32 = 651;
 pub(crate) const GUI_HEIGHT: u32 = 391;
+pub(crate) const TEST_IMAGE: OnceCell<egui::TextureId> = OnceCell::new();
 
 pub(crate) fn create_gui(
     plugin: &mut Malt,
@@ -71,6 +78,9 @@ pub(crate) fn create_gui(
 
                 ctx.set_style(style);
             }
+
+            // Enable loading image resources
+            egui_extras::install_image_loaders(ctx);
         },
         move |ctx, setter, _state| {
             let header_frame = egui::Frame::none().fill(egui::Color32::from_rgb(17, 17, 17));
@@ -187,6 +197,27 @@ pub(crate) fn create_gui(
                         KnobStyle::Donut { line_width: 4.0 },
                     );
                     ui.add(knob);
+
+                    ui.add(Button::new(
+                        ButtonContent::Text("apple"),
+                        // ButtonContent::Image(egui::include_image!(
+                        //     // r"C:\Users\James\Downloads\ferris.svg"
+                        //     // "../../screenshot.png"
+                        //     "../../checkerboard_32.png"
+                        // )),
+                        32.0,
+                        32.0,
+                        Color32::WHITE,
+                        Color32::WHITE,
+                        Color32::from_white_alpha(128),
+                        Color32::TRANSPARENT,
+                        Color32::from_white_alpha(26),
+                        Color32::RED,
+                    ));
+
+                    if ui.button("Hello").clicked() {
+                        nih_log!("Hello");
+                    }
                 });
 
             // left-side analyser (variable size)
@@ -210,10 +241,7 @@ pub(crate) fn create_gui(
                 // display and modify the parameter from the parametr itself
                 // It's not yet fully implemented, as the text is missing.
                 ui.label("gain_reduction");
-                ui.add(widgets::ParamSlider::for_param(
-                    &params.low_gain,
-                    setter,
-                ));
+                ui.add(widgets::ParamSlider::for_param(&params.low_gain, setter));
                 ui.label("precomp");
                 ui.add(widgets::ParamSlider::for_param(&params.low_precomp, setter));
                 ui.label("release");
