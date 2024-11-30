@@ -1,12 +1,20 @@
 use super::knob::{Knob, KnobStyle};
 use crate::{
-    gui::button::{Button, ButtonContent},
+    gui::{
+        button::{custom_block_button, BlockButton, ButtonContent},
+        palette::{self as C},
+    },
     Malt,
 };
 use nih_plug::prelude::*;
 use nih_plug_egui::{
     create_egui_editor,
-    egui::{self, vec2, Color32, FontFamily, FontId, TextStyle},
+    egui::{
+        self,
+        text::{LayoutJob, TextWrapping},
+        vec2, Align, CentralPanel, Color32, FontFamily, FontId, Response, RichText, Spacing,
+        TextStyle, Ui, Vec2,
+    },
     resizable_window::ResizableWindow,
     widgets,
 };
@@ -17,6 +25,41 @@ pub(crate) const GUI_DEFAULT_HEIGHT: u32 = 391;
 pub(crate) const GUI_MINIMUM_WIDTH: u32 = 128;
 pub(crate) const GUI_MINIMUM_HEIGHT: u32 = 128;
 
+/// Rich text
+fn rt(ui: &mut egui::Ui, text: impl Into<String>, family: &FontFamily, size: f32, color: Color32) {
+    ui.label(
+        egui::RichText::new(text)
+            .family(family.clone())
+            .size(size)
+            .color(color),
+    );
+}
+
+fn rt_obj(
+    ui: &mut egui::Ui,
+    text: impl Into<String>,
+    family: &FontFamily,
+    size: f32,
+    color: Color32,
+) -> egui::RichText {
+    egui::RichText::new(text)
+        .family(family.clone())
+        .size(size)
+        .color(color)
+}
+
+struct UIState {
+    help_enabled: bool,
+}
+
+impl UIState {
+    fn new() -> Self {
+        Self {
+            help_enabled: false,
+        }
+    }
+}
+
 pub(crate) fn create_gui(
     plugin: &mut Malt,
     _async_executor: AsyncExecutor<Malt>,
@@ -25,8 +68,8 @@ pub(crate) fn create_gui(
     let egui_state = plugin.params.editor_state.clone();
     create_egui_editor(
         plugin.params.editor_state.clone(),
-        (),
-        |ctx, _| {
+        UIState::new(),
+        |ctx, state| {
             // Load new fonts
             {
                 use egui::{FontData, FontDefinitions, FontFamily};
@@ -80,8 +123,11 @@ pub(crate) fn create_gui(
                 ]
                 .into();
 
-                // color styling
-                style.visuals.panel_fill = Color32::from_rgb(48, 48, 48);
+                // make background red to help identify places with no background
+                style.visuals.panel_fill = Color32::RED;
+
+                // disable item spacing, do everything manually
+                style.spacing.item_spacing = Vec2::ZERO;
 
                 style.interaction.selectable_labels = false;
 
@@ -91,12 +137,11 @@ pub(crate) fn create_gui(
             // Enable loading image resources
             egui_extras::install_image_loaders(ctx);
         },
-        move |ctx, setter, _state| {
+        move |ctx, setter, state| {
             ResizableWindow::new("resizable-window")
                 .min_size(vec2(GUI_MINIMUM_WIDTH as f32, GUI_MINIMUM_HEIGHT as f32))
                 .show(ctx, &egui_state, |ui| {
-                    let header_frame =
-                        egui::Frame::none().fill(egui::Color32::from_rgb(17, 17, 17));
+                    let header_frame = egui::Frame::none().fill(C::BG_DARK);
                     const HEADER_HEIGHT: f32 = 25.0;
 
                     // Header
@@ -106,38 +151,58 @@ pub(crate) fn create_gui(
                         .frame(header_frame.clone())
                         .show(ctx, |ui| {
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                // Left side
+                                let left_side = |ui: &mut Ui| {
+                                    ui.add_space(12.0);
+                                    rt(ui, "sai audio", &C::FONT_NORMAL, C::TEXT_LARGE, C::FG_GREY);
+                                    ui.add_space(10.0);
+                                    rt(ui, "Malt", &C::FONT_BOLD, C::TEXT_LARGE, C::FG_WHITE);
+                                };
                                 // Right side
+                                // Widgets must be inserted in reverse order here
+                                let right_side = |ui: &mut Ui| {
+                                    let res = if state.help_enabled {
+                                        ui.add(BlockButton::new(
+                                            ButtonContent::Text(
+                                                "?",
+                                                FontId::new(C::TEXT_BASE, C::FONT_BOLD.clone()),
+                                            ),
+                                            vec2(22.0, 25.0),
+                                            C::BG_DARK,
+                                            C::BG_DARK,
+                                            C::BG_DARK,
+                                            C::FG_GREEN,
+                                            C::FG_GREEN.lerp_to_gamma(C::FG_WHITE, 0.1),
+                                            C::FG_GREEN.lerp_to_gamma(C::BG_DARK, 0.2),
+                                        ))
+                                    } else {
+                                        ui.add(BlockButton::new(
+                                            ButtonContent::Text(
+                                                "?",
+                                                FontId::new(C::TEXT_BASE, C::FONT_BOLD.clone()),
+                                            ),
+                                            vec2(22.0, 25.0),
+                                            C::FG_GREY,
+                                            C::FG_GREY,
+                                            C::FG_GREY.gamma_multiply(0.5),
+                                            Color32::TRANSPARENT,
+                                            C::FG_WHITE.gamma_multiply(0.1),
+                                            Color32::TRANSPARENT,
+                                        ))
+                                    };
+                                    if res.clicked() {
+                                        state.help_enabled = !state.help_enabled;
+                                    }
+                                };
+
                                 ui.allocate_ui_with_layout(
                                     egui::Vec2::new(0.0, HEADER_HEIGHT),
                                     egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        let help_btn = Button::new(
-                                            ButtonContent::Text(
-                                                "?",
-                                                FontId::new(12.0, FontFamily::Name("bold".into())),
-                                            ),
-                                            22.0,
-                                            22.0,
-                                            Color32::WHITE,
-                                            Color32::WHITE,
-                                            Color32::from_white_alpha(128),
-                                            Color32::TRANSPARENT,
-                                            Color32::from_white_alpha(26),
-                                            Color32::from_white_alpha(26),
-                                        );
-                                        if ui.add(help_btn).clicked() {
-                                            nih_log!("Help!");
-                                        }
-                                        ui.label("right side:");
-                                    },
+                                    right_side,
                                 );
-                                // Left side
                                 ui.with_layout(
                                     egui::Layout::left_to_right(egui::Align::Center),
-                                    |ui| {
-                                        ui.heading("sai audio Malt");
-                                        ui.label("This is the header again!");
-                                    },
+                                    left_side,
                                 );
                             })
                         });
@@ -148,31 +213,67 @@ pub(crate) fn create_gui(
                         .exact_height(HEADER_HEIGHT)
                         .frame(header_frame.clone())
                         .show(ctx, |ui| {
-                            // Un-comment the surrounding code when you're able to implement window resizing
-
-                            // ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            //     // Right side
-                            //     ui.allocate_ui_with_layout(
-                            //         egui::Vec2::new(0.0, HEADER_HEIGHT),
-                            //         egui::Layout::right_to_left(egui::Align::Center),
-                            //         |ui| {
-                            //             ui.label("///");
-                            //         },
-                            //     );
-                            //     // Left side
-                            //     ui.with_layout(
-                            //         egui::Layout::centered_and_justified(egui::Direction::LeftToRight),
-                            //         |ui| {
                             ui.columns(5, |cols| {
-                                cols[0].centered_and_justified(|ui| ui.label("Trigger: MIDI"));
+                                let available_size = cols[0].available_size();
+
+                                cols[0].add_sized(available_size, |ui: &mut Ui| -> Response {
+                                    custom_block_button(
+                                        ui,
+                                        vec2(22.0, 22.0),
+                                        Color32::TRANSPARENT,
+                                        C::FG_WHITE.gamma_multiply(0.1),
+                                        Color32::TRANSPARENT,
+                                        |ui, res, painter, state| {
+                                            let style = ui.style().clone();
+                                            let mut layout_job = LayoutJob::default();
+                                            layout_job.wrap =
+                                                TextWrapping::from_wrap_mode_and_width(
+                                                    egui::TextWrapMode::Truncate,
+                                                    available_size.x,
+                                                );
+                                            layout_job.halign = Align::Center;
+
+                                            rt_obj(
+                                                ui,
+                                                "Overlap: ",
+                                                &C::FONT_NORMAL,
+                                                C::TEXT_SM,
+                                                C::FG_GREY,
+                                            )
+                                            .append_to(
+                                                &mut layout_job,
+                                                &style,
+                                                egui::FontSelection::Default,
+                                                Align::Center,
+                                            );
+                                            rt_obj(
+                                                ui,
+                                                "Replace",
+                                                &C::FONT_NORMAL,
+                                                C::TEXT_SM,
+                                                C::FG_WHITE,
+                                            )
+                                            .append_to(
+                                                &mut layout_job,
+                                                &style,
+                                                egui::FontSelection::Default,
+                                                Align::Center,
+                                            );
+
+                                            let galley = painter.layout_job(layout_job);
+
+                                            let mut draw_pos = res.rect.center();
+                                            draw_pos.y -= galley.rect.bottom() / 2.0;
+
+                                            painter.galley(draw_pos, galley, Color32::RED);
+                                        },
+                                    )
+                                });
                                 cols[1].centered_and_justified(|ui| ui.label("Lookahead: 10ms"));
                                 cols[2].centered_and_justified(|ui| ui.label("Smooth: On"));
                                 cols[3].centered_and_justified(|ui| ui.label("Bypass"));
                                 cols[4].centered_and_justified(|ui| ui.label("Mix: 100%"));
                             })
-                            //         },
-                            //     );
-                            // })
                         });
 
                     const BAND_WIDGET_WIDTH: f32 = 341.0;
@@ -223,10 +324,9 @@ pub(crate) fn create_gui(
                             );
                             ui.add(knob);
 
-                            ui.add(Button::new(
+                            ui.add(BlockButton::new(
                                 ButtonContent::Image(egui::include_image!("res/power.svg")),
-                                22.0,
-                                22.0,
+                                vec2(22.0, 22.0),
                                 Color32::WHITE,
                                 Color32::WHITE,
                                 Color32::from_white_alpha(128),
@@ -235,13 +335,12 @@ pub(crate) fn create_gui(
                                 Color32::from_white_alpha(26),
                             ));
 
-                            ui.add(Button::new(
+                            ui.add(BlockButton::new(
                                 ButtonContent::Text(
                                     "M",
                                     FontId::new(12.0, FontFamily::Name("bold".into())),
                                 ),
-                                22.0,
-                                22.0,
+                                vec2(22.0, 22.0),
                                 Color32::WHITE,
                                 Color32::WHITE,
                                 Color32::from_white_alpha(128),
@@ -250,13 +349,12 @@ pub(crate) fn create_gui(
                                 Color32::from_white_alpha(26),
                             ));
 
-                            ui.add(Button::new(
+                            ui.add(BlockButton::new(
                                 ButtonContent::Text(
                                     "S",
                                     FontId::new(12.0, FontFamily::Name("bold".into())),
                                 ),
-                                22.0,
-                                22.0,
+                                vec2(22.0, 22.0),
                                 Color32::WHITE,
                                 Color32::WHITE,
                                 Color32::from_white_alpha(128),

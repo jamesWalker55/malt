@@ -1,6 +1,5 @@
 use nih_plug_egui::egui::{
-    vec2, Align2, Color32, FontFamily, FontId, Image, ImageSource, Response, Sense, TextStyle, Ui,
-    Widget,
+    Align2, Color32, FontId, Image, ImageSource, Painter, Response, Sense, Ui, Vec2, Widget,
 };
 
 pub(crate) enum ButtonContent {
@@ -8,10 +7,9 @@ pub(crate) enum ButtonContent {
     Image(ImageSource<'static>),
 }
 
-pub(crate) struct Button {
+pub(crate) struct BlockButton {
     content: ButtonContent,
-    x: f32,
-    y: f32,
+    size: Vec2,
     text_inactive: Color32,
     text_hover: Color32,
     text_active: Color32,
@@ -20,11 +18,10 @@ pub(crate) struct Button {
     bg_active: Color32,
 }
 
-impl Button {
+impl BlockButton {
     pub(crate) fn new(
         content: ButtonContent,
-        x: f32,
-        y: f32,
+        size: Vec2,
         text_inactive: Color32,
         text_hover: Color32,
         text_active: Color32,
@@ -34,8 +31,7 @@ impl Button {
     ) -> Self {
         Self {
             content,
-            x,
-            y,
+            size,
             text_inactive,
             text_hover,
             text_active,
@@ -46,10 +42,9 @@ impl Button {
     }
 }
 
-impl Widget for Button {
+impl Widget for BlockButton {
     fn ui(self, ui: &mut Ui) -> Response {
-        let desired_size = vec2(self.x, self.y);
-        let response = ui.allocate_response(desired_size, Sense::click());
+        let response = ui.allocate_response(self.size, Sense::click());
 
         let painter = ui.painter_at(response.rect);
 
@@ -93,4 +88,45 @@ impl Widget for Button {
 
         response
     }
+}
+
+pub(crate) enum BlockButtonState {
+    Inactive,
+    Hover,
+    Active,
+}
+
+pub(crate) fn custom_block_button(
+    ui: &mut Ui,
+    size: Vec2,
+    bg_inactive: Color32,
+    bg_hover: Color32,
+    bg_active: Color32,
+    mut add_contents: impl FnMut(&mut Ui, &Response, Painter, BlockButtonState),
+) -> Response {
+    let response = ui.allocate_response(size, Sense::click());
+
+    let painter = ui.painter_at(response.rect);
+
+    let state: BlockButtonState;
+
+    // bg fill
+    {
+        let fill_color = if response.is_pointer_button_down_on() {
+            state = BlockButtonState::Active;
+            bg_active
+        } else if response.hovered() {
+            state = BlockButtonState::Hover;
+            bg_hover
+        } else {
+            state = BlockButtonState::Inactive;
+            bg_inactive
+        };
+        painter.rect_filled(response.rect, 0.0, fill_color);
+    }
+
+    // content text/image
+    add_contents(ui, &response, painter, state);
+
+    response
 }
