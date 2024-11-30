@@ -369,7 +369,7 @@ impl Default for MaltParams {
             mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(3))
                 .with_string_to_value(formatters::s2v_f32_percentage()),
-            editor_state: EguiState::from_size(gui::GUI_WIDTH, gui::GUI_HEIGHT),
+            editor_state: EguiState::from_size(gui::GUI_DEFAULT_WIDTH, gui::GUI_DEFAULT_HEIGHT),
         }
     }
 }
