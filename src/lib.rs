@@ -15,6 +15,8 @@ use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use splitter::MinimumThreeBand12Slope;
 use splitter::MinimumThreeBand24Slope;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use util::db_to_gain;
 
@@ -269,6 +271,7 @@ pub struct Malt {
     latency_seconds: f32,
     latency_samples: usize,
     current_slope: Slope,
+    latency_changed: Arc<AtomicBool>,
 }
 
 #[derive(Enum, PartialEq, Eq)]
@@ -309,8 +312,8 @@ struct MaltParams {
     editor_state: Arc<EguiState>,
 }
 
-impl Default for MaltParams {
-    fn default() -> Self {
+impl MaltParams {
+    fn new(latency_changed: Arc<AtomicBool>) -> Self {
         Self {
             channels: Default::default(),
 
@@ -349,7 +352,10 @@ impl Default for MaltParams {
             )
             .with_value_to_string(v2s_f32_ms_then_s(3))
             .with_string_to_value(s2v_f32_ms_then_s())
-            .non_automatable(),
+            .non_automatable()
+            .with_callback(Arc::new(move |_| {
+                latency_changed.store(true, Ordering::Release)
+            })),
 
             bypass: BoolParam::new("Bypass", false),
             mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
@@ -596,8 +602,9 @@ pub(crate) struct ChannelParamValues {
 
 impl Default for Malt {
     fn default() -> Self {
+        let latency_changed = Arc::new(AtomicBool::new(false));
         Self {
-            params: Arc::new(MaltParams::default()),
+            params: Arc::new(MaltParams::new(latency_changed.clone())),
             // these fields are not initialised here, see `initialize()` for the actual values
             sr: 0.0,
             latency_seconds: 0.0,
@@ -613,6 +620,7 @@ impl Default for Malt {
             latency_buf_l: AllocRingBuffer::new(1),
             latency_buf_r: AllocRingBuffer::new(1),
             env: BandLinkedEnvelopeLanes::new(0.0, false, EnvelopeOverlapMode::Max),
+            latency_changed,
         }
     }
 }
@@ -699,18 +707,39 @@ impl Plugin for Malt {
     ) -> ProcessStatus {
         debug_assert_eq!(buffer.channels(), 2);
 
+        // handle if latency has changed
+
+        // DON'T USE THE CLAP PLUGIN
+        // THE CLAP PLUGIN MAY CRASH HERE
+        //
+        // https://github.com/robbert-vdh/nih-plug/issues/177
+        //
+        // it will cause a really obscure error with `atomic_refcell` or `buffer_manager.borrow_mut` and some shit.
+        // the older version of this plugin also crashed, but much more rarely (52daad37469980396f472b2a6e5a5b35c352c07c)
+        // maybe the number of parameters somehow causes the likelihood of crashing to increase?
+        //
+        // it took fucking forever to debug this, don't do it
+        {
+            // code from Diopser example plugin
+            let latency_changed = self
+                .latency_changed
+                .compare_exchange(true, false, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok();
+            if latency_changed {
+                let lookahead_samples =
+                    self.params.lookahead.value() / 1000.0 * ctx.transport().sample_rate;
+                nih_log!("Changing latency samples to:");
+                nih_dbg!(lookahead_samples.round() as u32);
+                // update latency for daw, is no-op if value is same
+                ctx.set_latency_samples(lookahead_samples.round() as u32);
+            }
+        }
+
         let mut next_event = ctx.next_event();
 
         for (sample_id, mut channel_samples) in buffer.iter_samples().enumerate() {
             let params = self.params.next();
             let sample_rate = ctx.transport().sample_rate;
-
-            // handle if latency has changed
-            {
-                let lookahead_samples = params.lookahead * ctx.transport().sample_rate;
-                // update latency for daw, is no-op if value is same
-                ctx.set_latency_samples(lookahead_samples.round() as u32);
-            }
 
             // handle crossover slope change
             {
