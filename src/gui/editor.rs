@@ -135,14 +135,7 @@ pub(crate) fn create_gui(
                                 ui.with_layout(
                                     egui::Layout::left_to_right(egui::Align::Center),
                                     |ui| {
-                                        {
-                                            let style = ui.style_mut();
-                                            style.override_text_style = Some(TextStyle::Heading);
-
-                                            ui.label("sai audio Malt");
-
-                                            ui.reset_style();
-                                        }
+                                        ui.heading("sai audio Malt");
                                         ui.label("This is the header again!");
                                     },
                                 );
