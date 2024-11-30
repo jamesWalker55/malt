@@ -269,11 +269,6 @@ pub struct Malt {
     latency_seconds: f32,
     latency_samples: usize,
     current_slope: Slope,
-
-    /// The editor state, saved together with the parameter state so the custom scaling can be
-    /// restored.
-    // #[persist = "editor-state"]
-    editor_state: Arc<EguiState>,
 }
 
 #[derive(Enum, PartialEq, Eq)]
@@ -308,6 +303,10 @@ struct MaltParams {
     pub(crate) bypass: BoolParam,
     #[id = "mix"]
     pub(crate) mix: FloatParam,
+    /// The editor state, saved together with the parameter state so the custom scaling can be
+    /// restored.
+    #[persist = "editor-state"]
+    editor_state: Arc<EguiState>,
 }
 
 impl Default for MaltParams {
@@ -356,6 +355,7 @@ impl Default for MaltParams {
             mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(3))
                 .with_string_to_value(formatters::s2v_f32_percentage()),
+            editor_state: EguiState::from_size(gui::GUI_WIDTH, gui::GUI_HEIGHT),
         }
     }
 }
@@ -613,7 +613,6 @@ impl Default for Malt {
             latency_buf_l: AllocRingBuffer::new(1),
             latency_buf_r: AllocRingBuffer::new(1),
             env: BandLinkedEnvelopeLanes::new(0.0, false, EnvelopeOverlapMode::Max),
-            editor_state: EguiState::from_size(gui::GUI_WIDTH, gui::GUI_HEIGHT),
         }
     }
 }
