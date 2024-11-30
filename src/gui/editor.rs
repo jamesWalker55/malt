@@ -26,7 +26,7 @@ pub(crate) fn create_gui(
 ) -> Option<Box<dyn Editor>> {
     let params = plugin.params.clone();
     create_egui_editor(
-        plugin.editor_state.clone(),
+        plugin.params.editor_state.clone(),
         (),
         |ctx, _| {
             // Load new fonts
@@ -196,7 +196,7 @@ pub(crate) fn create_gui(
                     ui.label(format!("band_height: {:?}", band_height));
 
                     let knob = Knob::for_param(
-                        &params.low_gain,
+                        &params.channels[0].low_db,
                         setter,
                         34.0,
                         KnobStyle::Analog {
@@ -207,7 +207,7 @@ pub(crate) fn create_gui(
                     ui.add(knob);
 
                     let knob = Knob::for_param(
-                        &params.low_decay,
+                        &params.channels[0].low_decay,
                         setter,
                         44.0,
                         KnobStyle::Analog {
@@ -218,7 +218,7 @@ pub(crate) fn create_gui(
                     ui.add(knob);
 
                     let knob = Knob::for_param(
-                        &params.low_decay,
+                        &params.channels[0].low_decay,
                         setter,
                         15.0,
                         KnobStyle::Donut { line_width: 4.0 },
@@ -293,11 +293,11 @@ pub(crate) fn create_gui(
                 // display and modify the parameter from the parametr itself
                 // It's not yet fully implemented, as the text is missing.
                 ui.label("gain_reduction");
-                ui.add(widgets::ParamSlider::for_param(&params.low_gain, setter));
+                ui.add(widgets::ParamSlider::for_param(&params.channels[0].low_db, setter));
                 ui.label("precomp");
-                ui.add(widgets::ParamSlider::for_param(&params.low_precomp, setter));
+                ui.add(widgets::ParamSlider::for_param(&params.channels[0].low_precomp, setter));
                 ui.label("release");
-                ui.add(widgets::ParamSlider::for_param(&params.low_decay, setter));
+                ui.add(widgets::ParamSlider::for_param(&params.channels[0].low_decay, setter));
                 // ui.label("low_crossover");
                 // ui.add(widgets::ParamSlider::for_param(
                 //     &params.low_crossover,
