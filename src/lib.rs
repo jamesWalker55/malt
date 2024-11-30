@@ -282,8 +282,6 @@ pub struct Malt {
     latency_buf_l: AllocRingBuffer<f32>,
     latency_buf_r: AllocRingBuffer<f32>,
     // keep track of when parameters get changed:
-    latency_seconds: f32,
-    latency_samples: usize,
     current_slope: Slope,
 }
 
@@ -616,8 +614,6 @@ impl Default for Malt {
             params: Arc::default(),
             // these fields are not initialised here, see `initialize()` for the actual values
             sr: 0.0,
-            latency_seconds: 0.0,
-            latency_samples: 0,
             max_latency_samples: 0,
             current_slope: Slope::F24,
             splitter_l: MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
@@ -727,16 +723,15 @@ impl Plugin for Malt {
         // maybe the number of parameters somehow causes the likelihood of crashing to increase?
         //
         // it took fucking forever to debug this, don't do it
-        {
-            let lookahead_samples =
-                self.params.lookahead.value() / 1000.0 * ctx.transport().sample_rate;
+        let lookahead_samples =
+            self.params.lookahead.value() / 1000.0 * ctx.transport().sample_rate;
+        let lookahead_samples = lookahead_samples.round() as u32;
 
-            // nih_log!("Changing latency samples to:");
-            // nih_dbg!(lookahead_samples.round() as u32);
+        // nih_log!("Changing latency samples to:");
+        // nih_dbg!(lookahead_samples);
 
-            // update latency for daw, is no-op if value is same
-            ctx.set_latency_samples(lookahead_samples.round() as u32);
-        }
+        // update latency for daw, is no-op if value is same
+        ctx.set_latency_samples(lookahead_samples);
 
         let mut next_event = ctx.next_event();
 
@@ -860,7 +855,7 @@ impl Plugin for Malt {
             let mid_gain = calculate_final_gain(mid_gain, params.mix, params.bypass);
             let high_gain = calculate_final_gain(high_gain, params.mix, params.bypass);
 
-            let latency_buf_offset = self.max_latency_samples - self.latency_samples;
+            let latency_buf_offset = self.max_latency_samples - lookahead_samples as usize;
 
             // left channel
             {
