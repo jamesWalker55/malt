@@ -375,7 +375,19 @@ impl Default for MaltParams {
 }
 
 impl MaltParams {
-    fn next(&self) -> MaltParamsValues {
+    fn value(&self) -> MaltParamValues {
+        let crossover_slope = self.crossover_slope.value();
+        let smoothing = self.smoothing.value();
+        let lookahead = self.lookahead.value() / 1000.0; // convert to seconds
+
+        MaltParamValues {
+            crossover_slope,
+            smoothing,
+            lookahead,
+        }
+    }
+
+    fn next(&self, lookahead: f32) -> MaltParamsNexts {
         let low_crossover = {
             let value = self.low_crossover.smoothed.next();
             // since high crossover will be 1 octave above this, this cannot be too high
@@ -389,36 +401,33 @@ impl MaltParams {
             value.max(min_value)
         };
 
-        let crossover_slope = self.crossover_slope.value();
-        let smoothing = self.smoothing.value();
-        let lookahead = self.lookahead.value() / 1000.0; // convert to seconds
         let bypass = self.bypass.value();
         let mix = self.mix.smoothed.next();
 
         let channels: [ChannelParamValues; 16] =
             self.channels.each_ref().map(|param| param.next(lookahead));
 
-        MaltParamsValues {
+        MaltParamsNexts {
             channels,
             low_crossover,
             high_crossover,
-            crossover_slope,
-            smoothing,
-            lookahead,
             bypass,
             mix,
         }
     }
 }
 
-struct MaltParamsValues {
-    channels: [ChannelParamValues; 16],
-    low_crossover: f32,
-    high_crossover: f32,
+struct MaltParamValues {
     crossover_slope: Slope,
     smoothing: bool,
     /// in seconds
     lookahead: f32,
+}
+
+struct MaltParamsNexts {
+    channels: [ChannelParamValues; 16],
+    low_crossover: f32,
+    high_crossover: f32,
     bypass: bool,
     mix: f32,
 }
@@ -711,62 +720,67 @@ impl Plugin for Malt {
     ) -> ProcessStatus {
         debug_assert_eq!(buffer.channels(), 2);
 
+        let sample_rate = ctx.transport().sample_rate;
+        let param_values = self.params.value();
+
+        // handle crossover slope change
+        {
+            if param_values.crossover_slope != self.current_slope {
+                // replace splitters with new slopes
+                self.current_slope = param_values.crossover_slope;
+                match self.current_slope {
+                    Slope::F24 => {
+                        self.splitter_l = MultibandGainApplier::ThreeBand24(
+                            MinimumThreeBand24Slope::new(1000.0, 2000.0, sample_rate.into()),
+                        );
+                        self.splitter_r = MultibandGainApplier::ThreeBand24(
+                            MinimumThreeBand24Slope::new(1000.0, 2000.0, sample_rate.into()),
+                        );
+                    }
+                    Slope::F12 => {
+                        self.splitter_l = MultibandGainApplier::ThreeBand12(
+                            MinimumThreeBand12Slope::new(1000.0, 2000.0, sample_rate.into()),
+                        );
+                        self.splitter_r = MultibandGainApplier::ThreeBand12(
+                            MinimumThreeBand12Slope::new(1000.0, 2000.0, sample_rate.into()),
+                        );
+                    }
+                }
+            }
+        }
+
+        // handle smoothing change
+        self.env
+            .set_smooth(sample_rate as f64, param_values.smoothing);
+
         // handle if latency has changed
+        let lookahead_samples = {
+            // DON'T USE THE CLAP PLUGIN
+            // THE CLAP PLUGIN MAY CRASH HERE
+            //
+            // https://github.com/robbert-vdh/nih-plug/issues/177
+            //
+            // it will cause a really obscure error with `atomic_refcell` or `buffer_manager.borrow_mut` and some shit.
+            // the older version of this plugin also crashed, but much more rarely (52daad37469980396f472b2a6e5a5b35c352c07c)
+            // maybe the number of parameters somehow causes the likelihood of crashing to increase?
+            //
+            // it took fucking forever to debug this, don't do it
+            let lookahead_samples = param_values.lookahead * ctx.transport().sample_rate;
+            let lookahead_samples = lookahead_samples.round() as u32;
 
-        // DON'T USE THE CLAP PLUGIN
-        // THE CLAP PLUGIN MAY CRASH HERE
-        //
-        // https://github.com/robbert-vdh/nih-plug/issues/177
-        //
-        // it will cause a really obscure error with `atomic_refcell` or `buffer_manager.borrow_mut` and some shit.
-        // the older version of this plugin also crashed, but much more rarely (52daad37469980396f472b2a6e5a5b35c352c07c)
-        // maybe the number of parameters somehow causes the likelihood of crashing to increase?
-        //
-        // it took fucking forever to debug this, don't do it
-        let lookahead_samples =
-            self.params.lookahead.value() / 1000.0 * ctx.transport().sample_rate;
-        let lookahead_samples = lookahead_samples.round() as u32;
+            // nih_log!("Changing latency samples to:");
+            // nih_dbg!(lookahead_samples);
 
-        // nih_log!("Changing latency samples to:");
-        // nih_dbg!(lookahead_samples);
+            // update latency for daw, is no-op if value is same
+            ctx.set_latency_samples(lookahead_samples);
 
-        // update latency for daw, is no-op if value is same
-        ctx.set_latency_samples(lookahead_samples);
+            lookahead_samples
+        };
 
         let mut next_event = ctx.next_event();
 
         for (sample_id, mut channel_samples) in buffer.iter_samples().enumerate() {
-            let params = self.params.next();
-            let sample_rate = ctx.transport().sample_rate;
-
-            // handle crossover slope change
-            {
-                if params.crossover_slope != self.current_slope {
-                    // replace splitters with new slopes
-                    self.current_slope = params.crossover_slope;
-                    match self.current_slope {
-                        Slope::F24 => {
-                            self.splitter_l = MultibandGainApplier::ThreeBand24(
-                                MinimumThreeBand24Slope::new(1000.0, 2000.0, sample_rate.into()),
-                            );
-                            self.splitter_r = MultibandGainApplier::ThreeBand24(
-                                MinimumThreeBand24Slope::new(1000.0, 2000.0, sample_rate.into()),
-                            );
-                        }
-                        Slope::F12 => {
-                            self.splitter_l = MultibandGainApplier::ThreeBand12(
-                                MinimumThreeBand12Slope::new(1000.0, 2000.0, sample_rate.into()),
-                            );
-                            self.splitter_r = MultibandGainApplier::ThreeBand12(
-                                MinimumThreeBand12Slope::new(1000.0, 2000.0, sample_rate.into()),
-                            );
-                        }
-                    }
-                }
-            }
-
-            // handle smoothing change
-            self.env.set_smooth(sample_rate as f64, params.smoothing);
+            let params = self.params.next(param_values.lookahead);
 
             // handle MIDI events
             let mut channel_triggered: [bool; 16] = [false; 16];
@@ -805,7 +819,7 @@ impl Plugin for Malt {
                     BandLinkedVoice {
                         low: Envelope::from_latency(
                             sample_rate,
-                            params.lookahead,
+                            param_values.lookahead,
                             params.channels[channel].low_precomp,
                             params.channels[channel].low_decay,
                             Curve::EaseInSine,
@@ -813,7 +827,7 @@ impl Plugin for Malt {
                         ),
                         mid: Envelope::from_latency(
                             sample_rate,
-                            params.lookahead,
+                            param_values.lookahead,
                             params.channels[channel].mid_precomp,
                             params.channels[channel].mid_decay,
                             Curve::EaseInSine,
@@ -821,7 +835,7 @@ impl Plugin for Malt {
                         ),
                         high: Envelope::from_latency(
                             sample_rate,
-                            params.lookahead,
+                            param_values.lookahead,
                             params.channels[channel].high_precomp,
                             params.channels[channel].high_decay,
                             Curve::EaseInSine,
