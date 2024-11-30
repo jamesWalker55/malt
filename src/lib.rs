@@ -351,8 +351,8 @@ impl Default for MaltParams {
             .with_value_to_string(formatters::v2s_f32_hz_then_khz(3))
             .with_string_to_value(formatters::s2v_f32_hz_then_khz()),
 
-            crossover_slope: EnumParam::new("Crossover slope", Slope::F24),
-            smoothing: BoolParam::new("Smoothing", true),
+            crossover_slope: EnumParam::new("Crossover slope", Slope::F24).non_automatable(),
+            smoothing: BoolParam::new("Smoothing", true).non_automatable(),
             lookahead: FloatParam::new(
                 "Lookahead",
                 10.0,
