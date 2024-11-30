@@ -56,13 +56,9 @@ enum EnvelopeOverlapMode {
 }
 
 struct BandLinkedVoice {
-    channel: u8,
     low: Envelope,
     mid: Envelope,
     high: Envelope,
-    low_db: f32,
-    mid_db: f32,
-    high_db: f32,
 }
 
 impl BandLinkedVoice {
@@ -83,28 +79,11 @@ impl BandLinkedVoice {
     fn is_complete(&self) -> bool {
         self.low.is_complete() && self.mid.is_complete() && self.high.is_complete()
     }
-
-    /// This expects scalars 0.0 -- 1.0 as input.
-    fn set_db_gains(&mut self, low_db: f32, mid_db: f32, high_db: f32) {
-        self.low_db = low_db;
-        self.mid_db = mid_db;
-        self.high_db = high_db;
-    }
-
-    // /// Return the gain in dB of each envelope (is negative, e.g. -24dB)
-    // fn tick(&mut self) -> [Option<f32>; 3] {
-    //     [
-    //         self.low.tick().map(|x| x * self.low_gain),
-    //         self.mid.tick().map(|x| x * self.mid_gain),
-    //         self.high.tick().map(|x| x * self.high_gain),
-    //     ]
-    // }
 }
 
 struct BandLinkedEnvelopeLanes<const VOICES: usize> {
-    // sr: f64,
-    // latency_seconds: f32,
-    voices: [Option<BandLinkedVoice>; VOICES],
+    voices: [[Option<BandLinkedVoice>; VOICES]; 16],
+    gain_dbs: [(f32, f32, f32); 16],
     filter_l: FixedQFilter<FirstOrderLP>,
     filter_m: FixedQFilter<FirstOrderLP>,
     filter_h: FixedQFilter<FirstOrderLP>,
@@ -114,6 +93,7 @@ struct BandLinkedEnvelopeLanes<const VOICES: usize> {
 
 impl<const VOICES: usize> BandLinkedEnvelopeLanes<VOICES> {
     const EMPTY_VOICE: Option<BandLinkedVoice> = None;
+    const EMPTY_LANE: [Option<BandLinkedVoice>; VOICES] = [Self::EMPTY_VOICE; VOICES];
 
     fn default_filter(sr: f64) -> FixedQFilter<FirstOrderLP> {
         FixedQFilter::new(1000.0, sr)
@@ -121,7 +101,8 @@ impl<const VOICES: usize> BandLinkedEnvelopeLanes<VOICES> {
 
     fn new(sr: f64, smooth: bool, overlap_mode: EnvelopeOverlapMode) -> Self {
         Self {
-            voices: [Self::EMPTY_VOICE; VOICES],
+            voices: [Self::EMPTY_LANE; 16],
+            gain_dbs: Default::default(), // initialize to all zeros (0 dB)
             filter_l: Self::default_filter(sr),
             filter_m: Self::default_filter(sr),
             filter_h: Self::default_filter(sr),
@@ -130,23 +111,24 @@ impl<const VOICES: usize> BandLinkedEnvelopeLanes<VOICES> {
         }
     }
 
-    fn add(&mut self, voice: BandLinkedVoice) {
+    fn add(&mut self, channel: u8, voice: BandLinkedVoice) {
         let insertion_idx = {
             // insert into an empty cell
-            match self.voices.iter().position(|x| x.is_none()) {
+            match self.voices[channel as usize]
+                .iter()
+                .position(|x| x.is_none())
+            {
                 Some(idx) => idx,
                 // if no empty cells, find the envelope that's closest to finishing
                 None => {
-                    self.voices
+                    self.voices[channel as usize]
                         .iter()
                         .enumerate()
                         .max_by(|(_, opt1), (_, opt2)| match (opt1, opt2) {
-                            (None, None) => unreachable!(),
-                            (None, Some(_)) => unreachable!(),
-                            (Some(_), None) => unreachable!(),
                             (Some(voice1), Some(voice2)) => {
                                 voice1.progress().total_cmp(&voice2.progress())
                             }
+                            _ => unreachable!(),
                         })
                         .expect("envelope lane must have size of at least 1")
                         .0
@@ -154,20 +136,21 @@ impl<const VOICES: usize> BandLinkedEnvelopeLanes<VOICES> {
             }
         };
 
-        self.voices[insertion_idx] = Some(voice);
+        self.voices[channel as usize][insertion_idx] = Some(voice);
     }
 
     fn set_release(&mut self, channel: u8, low_release: f32, mid_release: f32, high_release: f32) {
-        for voice in &mut self.voices {
+        for voice in &mut self.voices[channel as usize] {
             let Some(voice) = voice else {
                 continue;
             };
-            if voice.channel != channel {
-                continue;
-            }
 
             voice.set_release(low_release, mid_release, high_release);
         }
+    }
+
+    fn set_gain_db(&mut self, channel: u8, low_db: f32, mid_db: f32, high_db: f32) {
+        self.gain_dbs[channel as usize] = (low_db, mid_db, high_db);
     }
 
     fn set_smooth(&mut self, sr: f64, smooth: bool) {
@@ -176,20 +159,33 @@ impl<const VOICES: usize> BandLinkedEnvelopeLanes<VOICES> {
         }
 
         self.smooth = smooth;
+
         // reset filter to avoid pops and clicks
-        self.filter_l = Self::default_filter(sr);
-        self.filter_m = Self::default_filter(sr);
-        self.filter_h = Self::default_filter(sr);
+        if smooth {
+            self.filter_l = Self::default_filter(sr);
+            self.filter_m = Self::default_filter(sr);
+            self.filter_h = Self::default_filter(sr);
+        }
     }
 
     /// Return the gain as scalars for each envelope (in range 0.0 -- 1.0)
     fn tick(&mut self) -> [f32; 3] {
+        // tick each channel's voices, and multiply their value with gain_db
         let low_db: f32 = {
-            let iter = self.voices.iter_mut().filter_map(|voice| {
-                voice
-                    .as_mut()
-                    .map(|voice| voice.low.tick().unwrap_or_default() * voice.low_db)
-            });
+            let iter = self
+                .voices
+                .iter_mut()
+                .enumerate()
+                .flat_map(|(channel, voices)| {
+                    voices.iter_mut().filter_map({
+                        let gain_dbs = &self.gain_dbs;
+                        move |voice| {
+                            voice.as_mut().map(|voice| {
+                                voice.low.tick().unwrap_or_default() * gain_dbs[channel].0
+                            })
+                        }
+                    })
+                });
 
             match self.overlap_mode {
                 EnvelopeOverlapMode::Sum => iter.sum(),
@@ -197,11 +193,20 @@ impl<const VOICES: usize> BandLinkedEnvelopeLanes<VOICES> {
             }
         };
         let mid_db: f32 = {
-            let iter = self.voices.iter_mut().filter_map(|voice| {
-                voice
-                    .as_mut()
-                    .map(|voice| voice.mid.tick().unwrap_or_default() * voice.mid_db)
-            });
+            let iter = self
+                .voices
+                .iter_mut()
+                .enumerate()
+                .flat_map(|(channel, voices)| {
+                    voices.iter_mut().filter_map({
+                        let gain_dbs = &self.gain_dbs;
+                        move |voice| {
+                            voice.as_mut().map(|voice| {
+                                voice.mid.tick().unwrap_or_default() * gain_dbs[channel].1
+                            })
+                        }
+                    })
+                });
 
             match self.overlap_mode {
                 EnvelopeOverlapMode::Sum => iter.sum(),
@@ -209,11 +214,20 @@ impl<const VOICES: usize> BandLinkedEnvelopeLanes<VOICES> {
             }
         };
         let high_db: f32 = {
-            let iter = self.voices.iter_mut().filter_map(|voice| {
-                voice
-                    .as_mut()
-                    .map(|voice| voice.high.tick().unwrap_or_default() * voice.high_db)
-            });
+            let iter = self
+                .voices
+                .iter_mut()
+                .enumerate()
+                .flat_map(|(channel, voices)| {
+                    voices.iter_mut().filter_map({
+                        let gain_dbs = &self.gain_dbs;
+                        move |voice| {
+                            voice.as_mut().map(|voice| {
+                                voice.high.tick().unwrap_or_default() * gain_dbs[channel].2
+                            })
+                        }
+                    })
+                });
 
             match self.overlap_mode {
                 EnvelopeOverlapMode::Sum => iter.sum(),
@@ -222,20 +236,22 @@ impl<const VOICES: usize> BandLinkedEnvelopeLanes<VOICES> {
         };
 
         // remove inactive envelopes
-        for cell in &mut self.voices {
-            {
-                let Some(voice) = cell else {
-                    continue;
+        for channel in self.voices.iter_mut() {
+            for cell in channel.iter_mut() {
+                {
+                    let Some(voice) = cell else {
+                        continue;
+                    };
+
+                    if !voice.is_complete() {
+                        continue;
+                    }
                 };
 
-                if !voice.is_complete() {
-                    continue;
-                }
-            };
-
-            // the cell is filled, and the voice is complete
-            // clear it now
-            *cell = None;
+                // the cell is filled, and the voice is complete
+                // clear it now
+                *cell = None;
+            }
         }
 
         let low = db_to_gain(-low_db);
@@ -262,7 +278,7 @@ pub struct Malt {
     // audio processing stuff:
     splitter_l: MultibandGainApplier,
     splitter_r: MultibandGainApplier,
-    env: BandLinkedEnvelopeLanes<64>,
+    env: BandLinkedEnvelopeLanes<16>,
     latency_buf_l: AllocRingBuffer<f32>,
     latency_buf_r: AllocRingBuffer<f32>,
     // keep track of when parameters get changed:
@@ -779,6 +795,8 @@ impl Plugin for Malt {
                     values.mid_decay,
                     values.high_decay,
                 );
+                self.env
+                    .set_gain_db(channel as u8, values.low_db, values.mid_db, values.high_db);
             }
 
             // trigger notes in envelope
@@ -787,36 +805,35 @@ impl Plugin for Malt {
                     continue;
                 }
 
-                self.env.add(BandLinkedVoice {
-                    channel: channel as u8,
-                    low: Envelope::from_latency(
-                        sample_rate,
-                        params.lookahead,
-                        params.channels[channel].low_precomp,
-                        params.channels[channel].low_decay,
-                        Curve::EaseInSine,
-                        Curve::EaseInOutSine,
-                    ),
-                    mid: Envelope::from_latency(
-                        sample_rate,
-                        params.lookahead,
-                        params.channels[channel].mid_precomp,
-                        params.channels[channel].mid_decay,
-                        Curve::EaseInSine,
-                        Curve::EaseInOutSine,
-                    ),
-                    high: Envelope::from_latency(
-                        sample_rate,
-                        params.lookahead,
-                        params.channels[channel].high_precomp,
-                        params.channels[channel].high_decay,
-                        Curve::EaseInSine,
-                        Curve::EaseInOutSine,
-                    ),
-                    low_db: params.channels[channel].low_db,
-                    mid_db: params.channels[channel].mid_db,
-                    high_db: params.channels[channel].high_db,
-                });
+                self.env.add(
+                    channel as u8,
+                    BandLinkedVoice {
+                        low: Envelope::from_latency(
+                            sample_rate,
+                            params.lookahead,
+                            params.channels[channel].low_precomp,
+                            params.channels[channel].low_decay,
+                            Curve::EaseInSine,
+                            Curve::EaseInOutSine,
+                        ),
+                        mid: Envelope::from_latency(
+                            sample_rate,
+                            params.lookahead,
+                            params.channels[channel].mid_precomp,
+                            params.channels[channel].mid_decay,
+                            Curve::EaseInSine,
+                            Curve::EaseInOutSine,
+                        ),
+                        high: Envelope::from_latency(
+                            sample_rate,
+                            params.lookahead,
+                            params.channels[channel].high_precomp,
+                            params.channels[channel].high_decay,
+                            Curve::EaseInSine,
+                            Curve::EaseInOutSine,
+                        ),
+                    },
+                );
             }
 
             // update filter frequency
