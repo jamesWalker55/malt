@@ -513,9 +513,7 @@ impl Default for ChannelParams {
                     max: 90.0,
                 },
             )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            .with_unit(" dB"),
             mid_db: FloatParam::new(
                 "Mid gain reduction",
                 db_to_gain(-30.0),
@@ -524,9 +522,7 @@ impl Default for ChannelParams {
                     max: 90.0,
                 },
             )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            .with_unit(" dB"),
             high_db: FloatParam::new(
                 "High gain reduction",
                 db_to_gain(-30.0),
@@ -535,9 +531,7 @@ impl Default for ChannelParams {
                     max: 90.0,
                 },
             )
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
+            .with_unit(" dB"),
         }
     }
 }
