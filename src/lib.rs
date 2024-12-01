@@ -600,7 +600,7 @@ impl Default for Malt {
 }
 
 impl Plugin for Malt {
-    const NAME: &'static str = "Malt";
+    const NAME: &'static str = "Malt v0.1";
     const VENDOR: &'static str = "SAI Audio";
     const URL: &'static str = env!("CARGO_PKG_HOMEPAGE");
     const EMAIL: &'static str = "hello@example.com";
