@@ -3,6 +3,7 @@ use crate::{
     gui::{
         button::{custom_block_button, BlockButton, ButtonContent},
         knob::KnobDonutText,
+        knobtext::KnobText,
         palette::{self as C},
     },
     Malt,
@@ -457,6 +458,17 @@ pub(crate) fn create_gui(
                                         color: C::FG_GREY,
                                     }),
                                 },
+                            );
+                            ui.add(knob);
+
+                            let knob = KnobText::for_param(
+                                &params.low_crossover,
+                                setter,
+                                vec2(100.0, 30.0),
+                                FontId::new(C::TEXT_XS, C::FONT_NORMAL),
+                                C::FG_GREY,
+                                true,
+                                true,
                             );
                             ui.add(knob);
 
