@@ -1,9 +1,10 @@
+use super::palette as C;
 use nih_plug::{
     nih_debug_assert_eq,
     prelude::{Param, ParamSetter},
 };
 use nih_plug_egui::egui::{
-    Align2, Color32, FontId, Id, Key, Response, Sense, TextEdit, Ui, Vec2, Widget,
+    Align, Align2, Color32, FontId, Id, Key, Layout, Response, Sense, TextEdit, Ui, Vec2, Widget,
 };
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -177,11 +178,22 @@ impl<'a, P: Param> KnobText<'a, P> {
         });
         let mut text_buf = text_buf_mutex.lock();
 
-        let mut output = TextEdit::singleline(&mut *text_buf)
-            .font(self.font_id)
-            .desired_width(self.size.x)
-            .id(current_id)
-            .show(ui);
+        let mut output = ui
+            .allocate_ui_with_layout(
+                self.size,
+                Layout::centered_and_justified(ui.layout().main_dir()),
+                |ui| {
+                    TextEdit::singleline(&mut *text_buf)
+                        .font(self.font_id)
+                        .text_color(C::FG_WHITE)
+                        .desired_width(self.size.x)
+                        .id(current_id)
+                        .vertical_align(Align::Center)
+                        .horizontal_align(Align::Center)
+                        .show(ui)
+                },
+            )
+            .inner;
 
         // select everything if first frame
         if should_select_everything {
