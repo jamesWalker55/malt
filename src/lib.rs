@@ -104,25 +104,6 @@ impl GainSmoother {
     }
 }
 
-const MAX_VOICES: usize = 32;
-
-pub struct Malt {
-    params: Arc<MaltParams>,
-    // fixed variables (per session)
-    sr: f32,
-    max_latency_samples: usize,
-    // audio processing stuff:
-    voices: [Option<BandLinkedVoice>; MAX_VOICES],
-    current_releases: [[f32; 3]; MAX_VOICES],
-    smoother: Option<GainSmoother>,
-    splitter_l: MultibandGainApplier,
-    splitter_r: MultibandGainApplier,
-    latency_buf_l: AllocRingBuffer<f32>,
-    latency_buf_r: AllocRingBuffer<f32>,
-    // keep track of when parameters get changed:
-    current_slope: Slope,
-}
-
 #[derive(Enum, PartialEq, Eq, Clone, Copy)]
 enum Slope {
     #[id = "fixed_24"]
@@ -456,6 +437,25 @@ pub(crate) struct ChannelParamValues {
     pub(crate) mid_db: f32,
     /// Gain in dB, 0.0 -- +90.0
     pub(crate) high_db: f32,
+}
+
+const MAX_VOICES: usize = 32;
+
+pub struct Malt {
+    params: Arc<MaltParams>,
+    // fixed variables (per session)
+    sr: f32,
+    max_latency_samples: usize,
+    // audio processing stuff:
+    voices: [Option<BandLinkedVoice>; MAX_VOICES],
+    current_releases: [[f32; 3]; MAX_VOICES],
+    smoother: Option<GainSmoother>,
+    splitter_l: MultibandGainApplier,
+    splitter_r: MultibandGainApplier,
+    latency_buf_l: AllocRingBuffer<f32>,
+    latency_buf_r: AllocRingBuffer<f32>,
+    // keep track of when parameters get changed:
+    current_slope: Slope,
 }
 
 impl Default for Malt {
