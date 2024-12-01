@@ -412,7 +412,7 @@ pub(crate) fn create_gui(
                         .exact_width(BAND_WIDGET_WIDTH)
                         .show_separator_line(false)
                         .resizable(false)
-                        .frame(egui::Frame::none().fill(Color32::from_rgb(48, 48, 48)))
+                        .frame(egui::Frame::none().fill(C::BG_LIGHT))
                         .show(ctx, |ui| {
                             // TODO: Handle 2-band or 1-band scenario
 
@@ -427,7 +427,7 @@ pub(crate) fn create_gui(
                                 setter,
                                 34.0,
                                 KnobStyle::Analog {
-                                    highlight_color: Color32::from_rgb(255, 245, 157),
+                                    highlight_color: C::FG_YELLOW,
                                     line_width: 2.0,
                                 },
                             );
@@ -438,7 +438,7 @@ pub(crate) fn create_gui(
                                 setter,
                                 44.0,
                                 KnobStyle::Analog {
-                                    highlight_color: Color32::from_rgb(206, 147, 216),
+                                    highlight_color: C::FG_PURPLE,
                                     line_width: 2.0,
                                 },
                             );

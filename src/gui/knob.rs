@@ -1,3 +1,4 @@
+use super::palette as C;
 use nih_plug::prelude::{Param, ParamSetter};
 use nih_plug_egui::egui::{
     epaint::{CircleShape, PathShape, PathStroke},
@@ -45,9 +46,9 @@ impl<'a, P: Param> Knob<'a, P> {
     const ARC_START: f32 = -3.0 / 8.0 * TAU;
     const ARC_END: f32 = -9.0 / 8.0 * TAU;
 
-    const LINE_COLOR: Color32 = Color32::from_rgb(245, 245, 245);
-    const BG_COLOR: Color32 = Color32::from_rgb(64, 64, 64);
-    const KNOB_COLOR: Color32 = Color32::from_rgb(33, 33, 33);
+    const LINE_COLOR: Color32 = C::FG_WHITE;
+    const BG_COLOR: Color32 = C::PANEL_KNOB_RIM_BG;
+    const KNOB_COLOR: Color32 = C::BG_NORMAL;
 
     pub(crate) fn for_param(
         param: &'a P,

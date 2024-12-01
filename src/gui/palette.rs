@@ -46,7 +46,7 @@ define_colors! {
 
     // PANEL_KNOB_BASE = BG_NORMAL;
     // PANEL_KNOB_MARKER = TEXT_NORMAL;
-    // PANEL_KNOB_RIM_BG = Color32::from_rgb(64, 64, 64);
+    PANEL_KNOB_RIM_BG = Color32::from_rgb(64, 64, 64);
     // PANEL_KNOB_TEXT = Color32::from_rgb(64, 64, 64);
 }
 
