@@ -654,16 +654,32 @@ impl Plugin for Malt {
     fn reset(&mut self) {
         // setup filters
         self.current_slope = self.params.crossover_slope.value();
-        self.splitter_l = ThreeBandSplitter::ThreeBand24(MinimumThreeBand24Slope::new(
-            1000.0,
-            2000.0,
-            self.sr.into(),
-        ));
-        self.splitter_r = ThreeBandSplitter::ThreeBand24(MinimumThreeBand24Slope::new(
-            1000.0,
-            2000.0,
-            self.sr.into(),
-        ));
+        match self.current_slope {
+            Slope::F24 => {
+                self.splitter_l = ThreeBandSplitter::ThreeBand24(MinimumThreeBand24Slope::new(
+                    1000.0,
+                    2000.0,
+                    self.sr.into(),
+                ));
+                self.splitter_r = ThreeBandSplitter::ThreeBand24(MinimumThreeBand24Slope::new(
+                    1000.0,
+                    2000.0,
+                    self.sr.into(),
+                ));
+            }
+            Slope::F12 => {
+                self.splitter_l = ThreeBandSplitter::ThreeBand12(MinimumThreeBand12Slope::new(
+                    1000.0,
+                    2000.0,
+                    self.sr.into(),
+                ));
+                self.splitter_r = ThreeBandSplitter::ThreeBand12(MinimumThreeBand12Slope::new(
+                    1000.0,
+                    2000.0,
+                    self.sr.into(),
+                ));
+            }
+        }
 
         // clear all envelopes
         self.voices = [const { None }; MAX_VOICES];
