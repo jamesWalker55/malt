@@ -78,15 +78,19 @@ impl<'a, P: Param> Widget for KnobText<'a, P> {
         let rect = response.rect;
 
         // handle mouse click/drag events
-        //
-        // drag only occurs after (1) holding down mouse, then (2) moving mouse
-        // therefore `drag_started()` and `clicked()` cannot BOTH be true at the same frame
-        //
-        // when ctrl+clicking on the knob, reset the parameter
-        if self.allow_keyboard && response.double_clicked() {
+        if self.allow_keyboard
+            // if drag is enabled, only start keyboard when double clicking
+            // if no drag allowed, start keyboard on single click
+            && ((self.allow_drag && response.double_clicked())
+                || (!self.allow_drag && response.clicked()))
+        {
             // start keyboard editing
             nih_log!("it's keyboard time")
         } else if self.allow_drag {
+            // drag only occurs after (1) holding down mouse, then (2) moving mouse
+            // therefore `drag_started()` and `clicked()` cannot BOTH be true at the same frame
+            //
+            // when ctrl+clicking on the knob, reset the parameter
             if response.clicked() && ui.input(|x| x.modifiers.command) {
                 self.param_setter.begin_set_parameter(self.param);
                 self.reset_param();
