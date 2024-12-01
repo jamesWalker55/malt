@@ -39,11 +39,6 @@ impl MinimumTwoBand24Slope {
         let high = self.hpf2.process_sample(self.hpf1.process_sample(sample));
         [low, high]
     }
-
-    pub(crate) fn apply_gain(&mut self, sample: Precision, gains: &[Precision; 2]) -> Precision {
-        let [low, high] = self.split_bands(sample);
-        low * gains[0] + high * gains[1]
-    }
 }
 
 pub(crate) struct MinimumTwoBand12Slope {
@@ -68,11 +63,6 @@ impl MinimumTwoBand12Slope {
         let low = self.lpf.process_sample(sample);
         let high = self.hpf.process_sample(sample);
         [low, -high]
-    }
-
-    pub(crate) fn apply_gain(&mut self, sample: Precision, gains: &[Precision; 2]) -> Precision {
-        let [low, high] = self.split_bands(sample);
-        low * gains[0] + high * gains[1]
     }
 }
 
@@ -120,11 +110,6 @@ impl MinimumThreeBand12Slope {
         let mid = self.lpf2.process_sample(midhigh);
         let high = -self.hpf2.process_sample(midhigh);
         [low, mid, high]
-    }
-
-    pub(crate) fn apply_gain(&mut self, sample: Precision, gains: &[Precision; 3]) -> Precision {
-        let [low, mid, high] = self.split_bands(sample);
-        low * gains[0] + mid * gains[1] + high * gains[2]
     }
 }
 
@@ -186,11 +171,6 @@ impl MinimumThreeBand24Slope {
         let mid = self.lpf4.process_sample(self.lpf3.process_sample(midhigh));
         let high = self.hpf4.process_sample(self.hpf3.process_sample(midhigh));
         [low, mid, high]
-    }
-
-    pub(crate) fn apply_gain(&mut self, sample: Precision, gains: &[Precision; 3]) -> Precision {
-        let [low, mid, high] = self.split_bands(sample);
-        low * gains[0] + mid * gains[1] + high * gains[2]
     }
 }
 

@@ -22,17 +22,16 @@ const CROSSOVER_MIN_HZ: f32 = 10.0;
 const CROSSOVER_MAX_HZ: f32 = 20000.0;
 const MAX_LATENCY_SECONDS: f32 = 0.01;
 
-enum MultibandGainApplier {
+enum ThreeBandSplitter {
     ThreeBand24(splitter::MinimumThreeBand24Slope),
     ThreeBand12(splitter::MinimumThreeBand12Slope),
 }
 
-impl MultibandGainApplier {
-    /// Gain is scalar, 0.0 to 1.0 and beyond
-    fn apply_gain(&mut self, sample: f64, gains: &[f64; 3]) -> f64 {
+impl ThreeBandSplitter {
+    fn split_bands(&mut self, sample: f64) -> [f64; 3] {
         match self {
-            MultibandGainApplier::ThreeBand24(splitter) => splitter.apply_gain(sample, gains),
-            MultibandGainApplier::ThreeBand12(splitter) => splitter.apply_gain(sample, gains),
+            ThreeBandSplitter::ThreeBand24(splitter) => splitter.split_bands(sample),
+            ThreeBandSplitter::ThreeBand12(splitter) => splitter.split_bands(sample),
         }
     }
 
@@ -40,10 +39,10 @@ impl MultibandGainApplier {
         nih_debug_assert!(f1 < f2, "f1 must be less than f2");
 
         match self {
-            MultibandGainApplier::ThreeBand24(splitter) => {
+            ThreeBandSplitter::ThreeBand24(splitter) => {
                 splitter.set_frequencies(f1, f2);
             }
-            MultibandGainApplier::ThreeBand12(splitter) => {
+            ThreeBandSplitter::ThreeBand12(splitter) => {
                 splitter.set_frequencies(f1, f2);
             }
         }
@@ -486,8 +485,8 @@ pub struct Malt {
     voices: [Option<BandLinkedVoice>; MAX_VOICES],
     current_releases: [[f32; 3]; MAX_VOICES],
     smoother: Option<GainSmoother>,
-    splitter_l: MultibandGainApplier,
-    splitter_r: MultibandGainApplier,
+    splitter_l: ThreeBandSplitter,
+    splitter_r: ThreeBandSplitter,
     latency_buf_l: AllocRingBuffer<f32>,
     latency_buf_r: AllocRingBuffer<f32>,
     // keep track of when parameters get changed:
@@ -505,12 +504,8 @@ impl Default for Malt {
             voices: [const { None }; MAX_VOICES],
             current_releases: [[0.0; 3]; MAX_VOICES],
             smoother: None,
-            splitter_l: MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
-                0.0, 0.0, 0.0,
-            )),
-            splitter_r: MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
-                0.0, 0.0, 0.0,
-            )),
+            splitter_l: ThreeBandSplitter::ThreeBand24(MinimumThreeBand24Slope::new(0.0, 0.0, 0.0)),
+            splitter_r: ThreeBandSplitter::ThreeBand24(MinimumThreeBand24Slope::new(0.0, 0.0, 0.0)),
             latency_buf_l: AllocRingBuffer::new(1),
             latency_buf_r: AllocRingBuffer::new(1),
         }
@@ -572,12 +567,12 @@ impl Plugin for Malt {
     fn reset(&mut self) {
         // setup filters
         self.current_slope = self.params.crossover_slope.value();
-        self.splitter_l = MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
+        self.splitter_l = ThreeBandSplitter::ThreeBand24(MinimumThreeBand24Slope::new(
             1000.0,
             2000.0,
             self.sr.into(),
         ));
-        self.splitter_r = MultibandGainApplier::ThreeBand24(MinimumThreeBand24Slope::new(
+        self.splitter_r = ThreeBandSplitter::ThreeBand24(MinimumThreeBand24Slope::new(
             1000.0,
             2000.0,
             self.sr.into(),
@@ -605,18 +600,18 @@ impl Plugin for Malt {
                 self.current_slope = param_values.crossover_slope;
                 match self.current_slope {
                     Slope::F24 => {
-                        self.splitter_l = MultibandGainApplier::ThreeBand24(
+                        self.splitter_l = ThreeBandSplitter::ThreeBand24(
                             MinimumThreeBand24Slope::new(1000.0, 2000.0, sample_rate.into()),
                         );
-                        self.splitter_r = MultibandGainApplier::ThreeBand24(
+                        self.splitter_r = ThreeBandSplitter::ThreeBand24(
                             MinimumThreeBand24Slope::new(1000.0, 2000.0, sample_rate.into()),
                         );
                     }
                     Slope::F12 => {
-                        self.splitter_l = MultibandGainApplier::ThreeBand12(
+                        self.splitter_l = ThreeBandSplitter::ThreeBand12(
                             MinimumThreeBand12Slope::new(1000.0, 2000.0, sample_rate.into()),
                         );
-                        self.splitter_r = MultibandGainApplier::ThreeBand12(
+                        self.splitter_r = ThreeBandSplitter::ThreeBand12(
                             MinimumThreeBand12Slope::new(1000.0, 2000.0, sample_rate.into()),
                         );
                     }
@@ -878,13 +873,12 @@ impl Plugin for Malt {
                 let delayed_sample = *self.latency_buf_l.get(latency_buf_offset).unwrap();
                 // push sample to buffer queue
                 self.latency_buf_l.push(*sample);
-                // *sample = delayed_sample;
 
                 // process delayed sample
-                *sample = self
-                    .splitter_l
-                    .apply_gain(delayed_sample as f64, &[low_gain, mid_gain, high_gain])
-                    as f32;
+                let [band_low, band_mid, band_high] =
+                    self.splitter_l.split_bands(delayed_sample as f64);
+                *sample =
+                    (band_low * low_gain + band_mid * mid_gain + band_high * high_gain) as f32;
             }
 
             // right channel
@@ -895,13 +889,12 @@ impl Plugin for Malt {
                 let delayed_sample = *self.latency_buf_r.get(latency_buf_offset).unwrap();
                 // push sample to buffer queue
                 self.latency_buf_r.push(*sample);
-                // *sample = delayed_sample;
 
                 // process delayed sample
-                *sample = self
-                    .splitter_r
-                    .apply_gain(delayed_sample as f64, &[low_gain, mid_gain, high_gain])
-                    as f32;
+                let [band_low, band_mid, band_high] =
+                    self.splitter_r.split_bands(delayed_sample as f64);
+                *sample =
+                    (band_low * low_gain + band_mid * mid_gain + band_high * high_gain) as f32;
             }
         }
 
