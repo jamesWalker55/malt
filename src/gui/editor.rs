@@ -14,8 +14,8 @@ use nih_plug_egui::{
     egui::{
         self,
         text::{LayoutJob, TextWrapping},
-        vec2, Align, CentralPanel, Color32, FontFamily, FontId, Id, Painter, Pos2, Response,
-        RichText, Spacing, Style, TextStyle, Ui, Vec2,
+        vec2, Align, CentralPanel, Color32, Context, FontFamily, FontId, Id, Label, Layout,
+        Painter, Pos2, Rect, Response, RichText, Spacing, Style, TextStyle, Ui, UiBuilder, Vec2,
     },
     resizable_window::ResizableWindow,
     widgets,
@@ -88,6 +88,104 @@ impl UIState {
             help_enabled: false,
         }
     }
+}
+
+fn simple_block_button(
+    ui: &mut Ui,
+    active: bool,
+    content: ButtonContent,
+    size: Vec2,
+    active_color: Color32,
+    fg_color: Color32,
+    bg_color: Color32,
+) -> Response {
+    if active {
+        ui.add(BlockButton::new(
+            content,
+            size,
+            bg_color,
+            bg_color,
+            bg_color,
+            active_color,
+            active_color.lerp_to_gamma(C::FG_WHITE, 0.1),
+            active_color.lerp_to_gamma(C::BG_DARK, 0.2),
+        ))
+    } else {
+        ui.add(BlockButton::new(
+            content,
+            size,
+            fg_color,
+            fg_color,
+            fg_color.gamma_multiply(0.5),
+            Color32::TRANSPARENT,
+            C::FG_WHITE.gamma_multiply(0.1),
+            Color32::TRANSPARENT,
+        ))
+    }
+}
+
+fn panel_band<'a, P: Param>(
+    ui: &mut Ui,
+    name: &'static str,
+    precomp: &'a P,
+    decay: &'a P,
+    reduction: &'a P,
+) {
+    const BUTTON_SIZE: Vec2 = Vec2::splat(22.0);
+
+    ui.with_layout(Layout::top_down(Align::LEFT), |ui| {
+        let res = simple_block_button(
+            ui,
+            true, // TODO
+            ButtonContent::Image(egui::include_image!("res/power.svg")),
+            BUTTON_SIZE,
+            C::FG_ORANGE,
+            C::FG_GREY,
+            C::BG_NORMAL,
+        );
+        if res.clicked() {
+            nih_log!("Power!");
+        }
+
+        ui.with_layout(Layout::bottom_up(Align::LEFT), |ui| {
+            let res = simple_block_button(
+                ui,
+                true, // TODO
+                ButtonContent::Text("S", FontId::new(C::TEXT_BASE, C::FONT_BOLD.clone())),
+                BUTTON_SIZE,
+                C::FG_BLUE,
+                C::FG_GREY,
+                C::BG_NORMAL,
+            );
+            if res.clicked() {
+                nih_log!("Solo!");
+            }
+            let res = simple_block_button(
+                ui,
+                true, // TODO
+                ButtonContent::Text("M", FontId::new(C::TEXT_BASE, C::FONT_BOLD.clone())),
+                BUTTON_SIZE,
+                C::FG_RED,
+                C::FG_GREY,
+                C::BG_NORMAL,
+            );
+            if res.clicked() {
+                nih_log!("Mute!");
+            }
+        });
+    });
+    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.add(BlockButton::new(
+            ButtonContent::Text("?", FontId::new(C::TEXT_BASE, C::FONT_BOLD.clone())),
+            BUTTON_SIZE,
+            C::BG_DARK,
+            C::BG_DARK,
+            C::BG_DARK,
+            C::FG_GREEN,
+            C::FG_GREEN.lerp_to_gamma(C::FG_WHITE, 0.1),
+            C::FG_GREEN.lerp_to_gamma(C::BG_DARK, 0.2),
+        ));
+    });
 }
 
 pub(crate) fn create_gui(
@@ -180,7 +278,7 @@ pub(crate) fn create_gui(
                         .exact_height(HEADER_HEIGHT)
                         .frame(header_frame.clone())
                         .show(ctx, |ui| {
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
                                 // Left side
                                 let left_side = |ui: &mut Ui| {
                                     ui.add_space(12.0);
@@ -191,48 +289,30 @@ pub(crate) fn create_gui(
                                 // Right side
                                 // Widgets must be inserted in reverse order here
                                 let right_side = |ui: &mut Ui| {
-                                    let res = if state.help_enabled {
-                                        ui.add(BlockButton::new(
-                                            ButtonContent::Text(
-                                                "?",
-                                                FontId::new(C::TEXT_BASE, C::FONT_BOLD.clone()),
-                                            ),
-                                            vec2(22.0, 25.0),
-                                            C::BG_DARK,
-                                            C::BG_DARK,
-                                            C::BG_DARK,
-                                            C::FG_GREEN,
-                                            C::FG_GREEN.lerp_to_gamma(C::FG_WHITE, 0.1),
-                                            C::FG_GREEN.lerp_to_gamma(C::BG_DARK, 0.2),
-                                        ))
-                                    } else {
-                                        ui.add(BlockButton::new(
-                                            ButtonContent::Text(
-                                                "?",
-                                                FontId::new(C::TEXT_BASE, C::FONT_BOLD.clone()),
-                                            ),
-                                            vec2(22.0, 25.0),
-                                            C::FG_GREY,
-                                            C::FG_GREY,
-                                            C::FG_GREY.gamma_multiply(0.5),
-                                            Color32::TRANSPARENT,
-                                            C::FG_WHITE.gamma_multiply(0.1),
-                                            Color32::TRANSPARENT,
-                                        ))
-                                    };
+                                    let res = simple_block_button(
+                                        ui,
+                                        state.help_enabled,
+                                        ButtonContent::Text(
+                                            "?",
+                                            FontId::new(C::TEXT_BASE, C::FONT_BOLD.clone()),
+                                        ),
+                                        vec2(22.0, 25.0),
+                                        C::FG_GREEN,
+                                        C::FG_GREY,
+                                        C::BG_DARK,
+                                    );
                                     if res.clicked() {
                                         state.help_enabled = !state.help_enabled;
                                     }
                                 };
 
-                                ui.allocate_ui_with_layout(
-                                    egui::Vec2::new(0.0, HEADER_HEIGHT),
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    right_side,
-                                );
                                 ui.with_layout(
                                     egui::Layout::left_to_right(egui::Align::Center),
                                     left_side,
+                                );
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    right_side,
                                 );
                             })
                         });
@@ -405,7 +485,7 @@ pub(crate) fn create_gui(
                             })
                         });
 
-                    const BAND_WIDGET_WIDTH: f32 = 341.0;
+                    const BAND_WIDGET_WIDTH: f32 = 248.0;
                     const BAND_WIDGET_HEIGHT: f32 = 113.0;
 
                     // right-side controls (fixed width, variable height)
@@ -421,6 +501,21 @@ pub(crate) fn create_gui(
 
                             // subtract 2 pixels (1px per divider line)
                             let band_height = (rect.height() - 2.0) / 3.0;
+
+                            ui.allocate_ui_with_layout(
+                                vec2(BAND_WIDGET_WIDTH, band_height),
+                                Layout::left_to_right(Align::Center),
+                                |ui| {
+                                    panel_band(
+                                        ui,
+                                        "HIGH",
+                                        &params.channels[0].high_precomp,
+                                        &params.channels[0].high_decay,
+                                        &params.channels[0].high_db,
+                                    )
+                                },
+                            );
+
                             ui.label(format!("band_height: {:?}", band_height));
 
                             let knob = Knob::for_param(
@@ -472,17 +567,6 @@ pub(crate) fn create_gui(
                                 false,
                             );
                             ui.add(knob);
-
-                            ui.add(BlockButton::new(
-                                ButtonContent::Image(egui::include_image!("res/power.svg")),
-                                vec2(22.0, 22.0),
-                                Color32::WHITE,
-                                Color32::WHITE,
-                                Color32::from_white_alpha(128),
-                                Color32::TRANSPARENT,
-                                Color32::from_white_alpha(26),
-                                Color32::from_white_alpha(26),
-                            ));
 
                             ui.add(BlockButton::new(
                                 ButtonContent::Text(
