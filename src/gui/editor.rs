@@ -2,6 +2,7 @@ use super::knob::{Knob, KnobStyle};
 use crate::{
     gui::{
         button::{custom_block_button, BlockButton, ButtonContent},
+        knob::KnobDonutText,
         palette::{self as C},
     },
     Malt,
@@ -447,7 +448,15 @@ pub(crate) fn create_gui(
                                 &params.channels[0].low_decay,
                                 setter,
                                 15.0,
-                                KnobStyle::Donut { line_width: 4.0 },
+                                KnobStyle::Donut {
+                                    line_width: 4.0,
+                                    text: Some(KnobDonutText {
+                                        spacing: 0.0,
+                                        width: 70.0,
+                                        font_id: FontId::new(C::TEXT_XS, C::FONT_NORMAL),
+                                        color: C::FG_GREY,
+                                    }),
+                                },
                             );
                             ui.add(knob);
 
