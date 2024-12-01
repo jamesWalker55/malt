@@ -114,6 +114,19 @@ enum Slope {
     F12,
 }
 
+#[derive(Enum, PartialEq, Eq, Clone, Copy)]
+enum MIDIProcessingMode {
+    #[id = "single"]
+    #[name = "Omni"]
+    Omni,
+    #[id = "pitches"]
+    #[name = "Pitch"]
+    Pitch,
+    #[id = "channels"]
+    #[name = "Channels"]
+    Channel,
+}
+
 #[derive(Params)]
 struct MaltParams {
     #[nested(array, group = "channels")]
@@ -136,6 +149,12 @@ struct MaltParams {
     pub(crate) bypass: BoolParam,
     #[id = "mix"]
     pub(crate) mix: FloatParam,
+
+    #[id = "midi_mode"]
+    pub(crate) midi_mode: EnumParam<MIDIProcessingMode>,
+    #[id = "midi_root_note"]
+    pub(crate) midi_root_note: IntParam,
+
     /// The editor state, saved together with the parameter state so the custom scaling can be
     /// restored.
     #[persist = "editor-state"]
@@ -188,6 +207,17 @@ impl Default for MaltParams {
             mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(3))
                 .with_string_to_value(formatters::s2v_f32_percentage()),
+
+            midi_mode: EnumParam::new("MIDI mode", MIDIProcessingMode::Pitch),
+            midi_root_note: IntParam::new(
+                "MIDI root note",
+                60, // default to C4
+                IntRange::Linear {
+                    min: 0,
+                    max: 127 - 15, // 15 less than max, because note range is 0..=15
+                },
+            ),
+
             editor_state: EguiState::from_size(gui::GUI_DEFAULT_WIDTH, gui::GUI_DEFAULT_HEIGHT),
         }
     }
@@ -198,11 +228,15 @@ impl MaltParams {
         let crossover_slope = self.crossover_slope.value();
         let smoothing = self.smoothing.value();
         let lookahead = self.lookahead.value() / 1000.0; // convert to seconds
+        let midi_mode = self.midi_mode.value();
+        let midi_root_note = self.midi_root_note.value() as u8;
 
         MaltParamValues {
             crossover_slope,
             smoothing,
             lookahead,
+            midi_mode,
+            midi_root_note,
         }
     }
 
@@ -241,6 +275,8 @@ struct MaltParamValues {
     smoothing: bool,
     /// in seconds
     lookahead: f32,
+    midi_mode: MIDIProcessingMode,
+    midi_root_note: u8,
 }
 
 struct MaltParamsNexts {
@@ -631,8 +667,24 @@ impl Plugin for Malt {
                     break;
                 }
 
-                if let NoteEvent::NoteOn { channel, .. } = event {
-                    channel_triggered[channel as usize] = true;
+                if let NoteEvent::NoteOn { channel, note, .. } = event {
+                    let channel: Option<usize> = match &param_values.midi_mode {
+                        MIDIProcessingMode::Omni => Some(0),
+                        MIDIProcessingMode::Pitch => {
+                            let range =
+                                param_values.midi_root_note..=(param_values.midi_root_note + 15);
+                            if range.contains(&note) {
+                                Some((note - param_values.midi_root_note) as usize)
+                            } else {
+                                None
+                            }
+                        }
+                        MIDIProcessingMode::Channel => Some(channel as usize),
+                    };
+
+                    if let Some(channel) = channel {
+                        channel_triggered[channel] = true;
+                    }
                 }
 
                 next_event = ctx.next_event();
