@@ -144,6 +144,25 @@ struct MaltParams {
     #[id = "lookahead"]
     pub(crate) lookahead: FloatParam,
 
+    #[id = "solo_low"]
+    pub(crate) solo_low: BoolParam,
+    #[id = "solo_mid"]
+    pub(crate) solo_mid: BoolParam,
+    #[id = "solo_high"]
+    pub(crate) solo_high: BoolParam,
+    #[id = "mute_low"]
+    pub(crate) mute_low: BoolParam,
+    #[id = "mute_mid"]
+    pub(crate) mute_mid: BoolParam,
+    #[id = "mute_high"]
+    pub(crate) mute_high: BoolParam,
+    #[id = "bypass_low"]
+    pub(crate) bypass_low: BoolParam,
+    #[id = "bypass_mid"]
+    pub(crate) bypass_mid: BoolParam,
+    #[id = "bypass_high"]
+    pub(crate) bypass_high: BoolParam,
+
     #[id = "bypass"]
     pub(crate) bypass: BoolParam,
     #[id = "mix"]
@@ -202,6 +221,16 @@ impl Default for MaltParams {
             .with_string_to_value(s2v_f32_ms_then_s())
             .non_automatable(),
 
+            solo_low: BoolParam::new("Solo low", false),
+            solo_mid: BoolParam::new("Solo mid", false),
+            solo_high: BoolParam::new("Solo high", false),
+            mute_low: BoolParam::new("Mute low", false),
+            mute_mid: BoolParam::new("Mute mid", false),
+            mute_high: BoolParam::new("Mute high", false),
+            bypass_low: BoolParam::new("Bypass low", false),
+            bypass_mid: BoolParam::new("Bypass mid", false),
+            bypass_high: BoolParam::new("Bypass high", false),
+
             bypass: BoolParam::new("Bypass", false),
             mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_value_to_string(formatters::v2s_f32_percentage(3))
@@ -223,12 +252,38 @@ impl Default for MaltParams {
 }
 
 impl MaltParams {
+    fn resolve_solo_mute(
+        low_solo: bool,
+        mid_solo: bool,
+        high_solo: bool,
+        low_mute: bool,
+        mid_mute: bool,
+        high_mute: bool,
+    ) -> [bool; 3] {
+        if low_solo || mid_solo || high_solo {
+            [low_solo, mid_solo, high_solo]
+        } else {
+            [!low_mute, !mid_mute, !high_mute]
+        }
+    }
+
     fn value(&self) -> MaltParamValues {
         let crossover_slope = self.crossover_slope.value();
         let smoothing = self.smoothing.value();
         let lookahead = self.lookahead.value() / 1000.0; // convert to seconds
         let midi_mode = self.midi_mode.value();
         let midi_root_note = self.midi_root_note.value() as u8;
+        let solo_low = self.solo_low.value();
+        let solo_mid = self.solo_mid.value();
+        let solo_high = self.solo_high.value();
+        let mute_low = self.mute_low.value();
+        let mute_mid = self.mute_mid.value();
+        let mute_high = self.mute_high.value();
+        let bypass_low = self.bypass_low.value();
+        let bypass_mid = self.bypass_mid.value();
+        let bypass_high = self.bypass_high.value();
+        let output_bands =
+            Self::resolve_solo_mute(solo_low, solo_mid, solo_high, mute_low, mute_mid, mute_high);
 
         MaltParamValues {
             crossover_slope,
@@ -236,6 +291,16 @@ impl MaltParams {
             lookahead,
             midi_mode,
             midi_root_note,
+            solo_low,
+            solo_mid,
+            solo_high,
+            mute_low,
+            mute_mid,
+            mute_high,
+            bypass_low,
+            bypass_mid,
+            bypass_high,
+            output_bands,
         }
     }
 
@@ -276,6 +341,16 @@ struct MaltParamValues {
     lookahead: f32,
     midi_mode: MIDIProcessingMode,
     midi_root_note: u8,
+    solo_low: bool,
+    solo_mid: bool,
+    solo_high: bool,
+    mute_low: bool,
+    mute_mid: bool,
+    mute_high: bool,
+    bypass_low: bool,
+    bypass_mid: bool,
+    bypass_high: bool,
+    output_bands: [bool; 3],
 }
 
 struct MaltParamsNexts {
@@ -848,9 +923,21 @@ impl Plugin for Malt {
             };
 
             // convert gain to scalar
-            let mut low_gain = db_to_gain(-low_db);
-            let mut mid_gain = db_to_gain(-mid_db);
-            let mut high_gain = db_to_gain(-high_db);
+            let mut low_gain = if param_values.bypass_low {
+                1.0
+            } else {
+                db_to_gain(-low_db)
+            };
+            let mut mid_gain = if param_values.bypass_mid {
+                1.0
+            } else {
+                db_to_gain(-mid_db)
+            };
+            let mut high_gain = if param_values.bypass_high {
+                1.0
+            } else {
+                db_to_gain(-high_db)
+            };
 
             // smooth the gain
             if let Some(smoother) = self.smoother.as_mut() {
@@ -877,8 +964,19 @@ impl Plugin for Malt {
                 // process delayed sample
                 let [band_low, band_mid, band_high] =
                     self.splitter_l.split_bands(delayed_sample as f64);
-                *sample =
-                    (band_low * low_gain + band_mid * mid_gain + band_high * high_gain) as f32;
+                *sample = {
+                    let mut rv: f64 = 0.0;
+                    if param_values.output_bands[0] {
+                        rv += band_low * low_gain;
+                    }
+                    if param_values.output_bands[1] {
+                        rv += band_mid * mid_gain;
+                    }
+                    if param_values.output_bands[2] {
+                        rv += band_high * high_gain;
+                    }
+                    rv as f32
+                };
             }
 
             // right channel
@@ -893,8 +991,19 @@ impl Plugin for Malt {
                 // process delayed sample
                 let [band_low, band_mid, band_high] =
                     self.splitter_r.split_bands(delayed_sample as f64);
-                *sample =
-                    (band_low * low_gain + band_mid * mid_gain + band_high * high_gain) as f32;
+                *sample = {
+                    let mut rv: f64 = 0.0;
+                    if param_values.output_bands[0] {
+                        rv += band_low * low_gain;
+                    }
+                    if param_values.output_bands[1] {
+                        rv += band_mid * mid_gain;
+                    }
+                    if param_values.output_bands[2] {
+                        rv += band_high * high_gain;
+                    }
+                    rv as f32
+                };
             }
         }
 
