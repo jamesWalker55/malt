@@ -63,12 +63,6 @@ struct BandLinkedVoice {
 }
 
 impl BandLinkedVoice {
-    fn set_release(&mut self, low_release: f32, mid_release: f32, high_release: f32) {
-        self.low.set_release(low_release);
-        self.mid.set_release(mid_release);
-        self.high.set_release(high_release);
-    }
-
     /// Returns the lowest progress of all the envelopes
     fn progress(&self) -> f32 {
         self.low
@@ -101,10 +95,10 @@ impl GainSmoother {
         }
     }
 
-    fn process_samples(&mut self, low: f64, mid: f64, high: f64) -> [f64; 3] {
-        let low = self.filter_l.process_sample(low);
-        let mid = self.filter_m.process_sample(mid);
-        let high = self.filter_h.process_sample(high);
+    fn process_samples(&mut self, low: f32, mid: f32, high: f32) -> [f32; 3] {
+        let low = self.filter_l.process_sample(low as f64) as f32;
+        let mid = self.filter_m.process_sample(mid as f64) as f32;
+        let high = self.filter_h.process_sample(high as f64) as f32;
 
         [low, mid, high]
     }
@@ -803,9 +797,21 @@ impl Plugin for Malt {
                 rv
             };
 
-            let low_gain = calculate_final_gain(db_to_gain(-low_db), params.mix, params.bypass);
-            let mid_gain = calculate_final_gain(db_to_gain(-mid_db), params.mix, params.bypass);
-            let high_gain = calculate_final_gain(db_to_gain(-high_db), params.mix, params.bypass);
+            // convert gain to scalar
+            let mut low_gain = db_to_gain(-low_db);
+            let mut mid_gain = db_to_gain(-mid_db);
+            let mut high_gain = db_to_gain(-high_db);
+
+            // smooth the gain
+            if let Some(smoother) = self.smoother.as_mut() {
+                [low_gain, mid_gain, high_gain] =
+                    smoother.process_samples(low_gain, mid_gain, high_gain);
+            }
+
+            // apply mix and bypass
+            let low_gain = calculate_final_gain(low_gain, params.mix, params.bypass);
+            let mid_gain = calculate_final_gain(mid_gain, params.mix, params.bypass);
+            let high_gain = calculate_final_gain(high_gain, params.mix, params.bypass);
 
             let latency_buf_offset = self.max_latency_samples - lookahead_samples as usize;
 
