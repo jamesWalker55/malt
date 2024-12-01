@@ -12,8 +12,8 @@ use nih_plug_egui::{
     egui::{
         self,
         text::{LayoutJob, TextWrapping},
-        vec2, Align, CentralPanel, Color32, FontFamily, FontId, Response, RichText, Spacing,
-        TextStyle, Ui, Vec2,
+        vec2, Align, CentralPanel, Color32, FontFamily, FontId, Painter, Pos2, Response, RichText,
+        Spacing, Style, TextStyle, Ui, Vec2,
     },
     resizable_window::ResizableWindow,
     widgets,
@@ -46,6 +46,34 @@ fn rt_obj(
         .family(family.clone())
         .size(size)
         .color(color)
+}
+
+fn draw_texts(
+    painter: &Painter,
+    style: &Style,
+    available_width: f32,
+    mut position: Pos2,
+    richtexts: impl IntoIterator<Item = RichText>,
+) {
+    let mut layout_job = LayoutJob::default();
+    layout_job.wrap =
+        TextWrapping::from_wrap_mode_and_width(egui::TextWrapMode::Truncate, available_width);
+    layout_job.halign = Align::Center;
+
+    for rt in richtexts {
+        rt.append_to(
+            &mut layout_job,
+            &style,
+            egui::FontSelection::Default,
+            Align::Center,
+        );
+    }
+
+    let galley = painter.layout_job(layout_job);
+
+    position.y -= galley.rect.bottom() / 2.0;
+
+    painter.galley(position, galley, Color32::RED);
 }
 
 struct UIState {
@@ -224,55 +252,154 @@ pub(crate) fn create_gui(
                                         C::FG_WHITE.gamma_multiply(0.1),
                                         Color32::TRANSPARENT,
                                         |ui, res, painter, state| {
-                                            let style = ui.style().clone();
-                                            let mut layout_job = LayoutJob::default();
-                                            layout_job.wrap =
-                                                TextWrapping::from_wrap_mode_and_width(
-                                                    egui::TextWrapMode::Truncate,
-                                                    available_size.x,
-                                                );
-                                            layout_job.halign = Align::Center;
-
-                                            rt_obj(
-                                                ui,
-                                                "Overlap: ",
-                                                &C::FONT_NORMAL,
-                                                C::TEXT_SM,
-                                                C::FG_GREY,
-                                            )
-                                            .append_to(
-                                                &mut layout_job,
-                                                &style,
-                                                egui::FontSelection::Default,
-                                                Align::Center,
+                                            draw_texts(
+                                                &painter,
+                                                &ui.style().clone(),
+                                                available_size.x,
+                                                res.rect.center(),
+                                                [
+                                                    rt_obj(
+                                                        ui,
+                                                        "Overlap: ",
+                                                        &C::FONT_NORMAL,
+                                                        C::TEXT_SM,
+                                                        C::FG_GREY,
+                                                    ),
+                                                    rt_obj(
+                                                        ui,
+                                                        "Replace",
+                                                        &C::FONT_NORMAL,
+                                                        C::TEXT_SM,
+                                                        C::FG_WHITE,
+                                                    ),
+                                                ],
                                             );
-                                            rt_obj(
-                                                ui,
-                                                "Replace",
-                                                &C::FONT_NORMAL,
-                                                C::TEXT_SM,
-                                                C::FG_WHITE,
-                                            )
-                                            .append_to(
-                                                &mut layout_job,
-                                                &style,
-                                                egui::FontSelection::Default,
-                                                Align::Center,
-                                            );
-
-                                            let galley = painter.layout_job(layout_job);
-
-                                            let mut draw_pos = res.rect.center();
-                                            draw_pos.y -= galley.rect.bottom() / 2.0;
-
-                                            painter.galley(draw_pos, galley, Color32::RED);
                                         },
                                     )
                                 });
-                                cols[1].centered_and_justified(|ui| ui.label("Lookahead: 10ms"));
-                                cols[2].centered_and_justified(|ui| ui.label("Smooth: On"));
-                                cols[3].centered_and_justified(|ui| ui.label("Bypass"));
-                                cols[4].centered_and_justified(|ui| ui.label("Mix: 100%"));
+                                cols[1].add_sized(available_size, |ui: &mut Ui| -> Response {
+                                    custom_block_button(
+                                        ui,
+                                        vec2(22.0, 22.0),
+                                        Color32::TRANSPARENT,
+                                        C::FG_WHITE.gamma_multiply(0.1),
+                                        Color32::TRANSPARENT,
+                                        |ui, res, painter, state| {
+                                            draw_texts(
+                                                &painter,
+                                                &ui.style().clone(),
+                                                available_size.x,
+                                                res.rect.center(),
+                                                [
+                                                    rt_obj(
+                                                        ui,
+                                                        "Lookahead: ",
+                                                        &C::FONT_NORMAL,
+                                                        C::TEXT_SM,
+                                                        C::FG_GREY,
+                                                    ),
+                                                    rt_obj(
+                                                        ui,
+                                                        "10ms",
+                                                        &C::FONT_NORMAL,
+                                                        C::TEXT_SM,
+                                                        C::FG_WHITE,
+                                                    ),
+                                                ],
+                                            );
+                                        },
+                                    )
+                                });
+                                cols[2].add_sized(available_size, |ui: &mut Ui| -> Response {
+                                    custom_block_button(
+                                        ui,
+                                        vec2(22.0, 22.0),
+                                        Color32::TRANSPARENT,
+                                        C::FG_WHITE.gamma_multiply(0.1),
+                                        Color32::TRANSPARENT,
+                                        |ui, res, painter, state| {
+                                            draw_texts(
+                                                &painter,
+                                                &ui.style().clone(),
+                                                available_size.x,
+                                                res.rect.center(),
+                                                [
+                                                    rt_obj(
+                                                        ui,
+                                                        "Smooth: ",
+                                                        &C::FONT_NORMAL,
+                                                        C::TEXT_SM,
+                                                        C::FG_GREY,
+                                                    ),
+                                                    rt_obj(
+                                                        ui,
+                                                        "On",
+                                                        &C::FONT_NORMAL,
+                                                        C::TEXT_SM,
+                                                        C::FG_WHITE,
+                                                    ),
+                                                ],
+                                            );
+                                        },
+                                    )
+                                });
+                                cols[3].add_sized(available_size, |ui: &mut Ui| -> Response {
+                                    custom_block_button(
+                                        ui,
+                                        vec2(22.0, 22.0),
+                                        Color32::TRANSPARENT,
+                                        C::FG_WHITE.gamma_multiply(0.1),
+                                        Color32::TRANSPARENT,
+                                        |ui, res, painter, state| {
+                                            draw_texts(
+                                                &painter,
+                                                &ui.style().clone(),
+                                                available_size.x,
+                                                res.rect.center(),
+                                                [rt_obj(
+                                                    ui,
+                                                    "Bypass",
+                                                    &C::FONT_NORMAL,
+                                                    C::TEXT_SM,
+                                                    C::FG_WHITE,
+                                                )],
+                                            );
+                                        },
+                                    )
+                                });
+                                cols[4].add_sized(available_size, |ui: &mut Ui| -> Response {
+                                    custom_block_button(
+                                        ui,
+                                        vec2(22.0, 22.0),
+                                        Color32::TRANSPARENT,
+                                        C::FG_WHITE.gamma_multiply(0.1),
+                                        Color32::TRANSPARENT,
+                                        |ui, res, painter, state| {
+                                            draw_texts(
+                                                &painter,
+                                                &ui.style().clone(),
+                                                available_size.x,
+                                                res.rect.center(),
+                                                [
+                                                    rt_obj(
+                                                        ui,
+                                                        "Mix: ",
+                                                        &C::FONT_NORMAL,
+                                                        C::TEXT_SM,
+                                                        C::FG_GREY,
+                                                    ),
+                                                    rt_obj(
+                                                        ui,
+                                                        "100%",
+                                                        &C::FONT_NORMAL,
+                                                        C::TEXT_SM,
+                                                        C::FG_WHITE,
+                                                    ),
+                                                ],
+                                            );
+                                        },
+                                    )
+                                });
                             })
                         });
 
