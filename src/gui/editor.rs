@@ -14,8 +14,8 @@ use nih_plug_egui::{
     egui::{
         self,
         text::{LayoutJob, TextWrapping},
-        vec2, Align, CentralPanel, Color32, FontFamily, FontId, Painter, Pos2, Response, RichText,
-        Spacing, Style, TextStyle, Ui, Vec2,
+        vec2, Align, CentralPanel, Color32, FontFamily, FontId, Id, Painter, Pos2, Response,
+        RichText, Spacing, Style, TextStyle, Ui, Vec2,
     },
     resizable_window::ResizableWindow,
     widgets,
@@ -469,6 +469,7 @@ pub(crate) fn create_gui(
                                 C::FG_GREY,
                                 true,
                                 true,
+                                false,
                             );
                             ui.add(knob);
 
