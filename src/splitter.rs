@@ -77,6 +77,8 @@ impl MinimumTwoBand12Slope {
 }
 
 pub(crate) struct MinimumThreeBand12Slope {
+    f1: Precision,
+    f2: Precision,
     lpf1: FixedQFilter<LinkwitzRileyLP>,
     hpf1: FixedQFilter<LinkwitzRileyHP>,
     lpf2: FixedQFilter<LinkwitzRileyLP>,
@@ -87,6 +89,8 @@ pub(crate) struct MinimumThreeBand12Slope {
 impl MinimumThreeBand12Slope {
     pub(crate) fn new(crossover1: Precision, crossover2: Precision, sr: Precision) -> Self {
         Self {
+            f1: crossover1,
+            f2: crossover2,
             apf: FixedQFilter::new(crossover2, sr),
             lpf1: FixedQFilter::new(crossover1, sr),
             hpf1: FixedQFilter::new(crossover1, sr),
@@ -96,11 +100,18 @@ impl MinimumThreeBand12Slope {
     }
 
     pub(crate) fn set_frequencies(&mut self, f1: Precision, f2: Precision) {
-        self.apf.set_frequency(f2);
-        self.lpf1.set_frequency(f1);
-        self.hpf1.set_frequency(f1);
-        self.lpf2.set_frequency(f2);
-        self.hpf2.set_frequency(f2);
+        if self.f1 != f1 {
+            self.f1 = f1;
+            self.lpf1.set_frequency(f1);
+            self.hpf1.set_frequency(f1);
+        }
+
+        if self.f2 != f2 {
+            self.f2 = f2;
+            self.apf.set_frequency(f2);
+            self.lpf2.set_frequency(f2);
+            self.hpf2.set_frequency(f2);
+        }
     }
 
     pub(crate) fn split_bands(&mut self, sample: Precision) -> [Precision; 3] {
@@ -118,6 +129,8 @@ impl MinimumThreeBand12Slope {
 }
 
 pub(crate) struct MinimumThreeBand24Slope {
+    f1: Precision,
+    f2: Precision,
     lpf1: GainlessFilter<CookbookLP>,
     lpf2: GainlessFilter<CookbookLP>,
     lpf3: GainlessFilter<CookbookLP>,
@@ -132,6 +145,8 @@ pub(crate) struct MinimumThreeBand24Slope {
 impl MinimumThreeBand24Slope {
     pub(crate) fn new(crossover1: Precision, crossover2: Precision, sr: Precision) -> Self {
         Self {
+            f1: crossover1,
+            f2: crossover2,
             lpf1: GainlessFilter::new(crossover1, std::f64::consts::FRAC_1_SQRT_2, sr),
             lpf2: GainlessFilter::new(crossover1, std::f64::consts::FRAC_1_SQRT_2, sr),
             lpf3: GainlessFilter::new(crossover2, std::f64::consts::FRAC_1_SQRT_2, sr),
@@ -145,15 +160,22 @@ impl MinimumThreeBand24Slope {
     }
 
     pub(crate) fn set_frequencies(&mut self, f1: Precision, f2: Precision) {
-        self.lpf1.set_frequency(f1);
-        self.lpf2.set_frequency(f1);
-        self.lpf3.set_frequency(f2);
-        self.lpf4.set_frequency(f2);
-        self.hpf1.set_frequency(f1);
-        self.hpf2.set_frequency(f1);
-        self.hpf3.set_frequency(f2);
-        self.hpf4.set_frequency(f2);
-        self.apf.set_frequency(f2);
+        if self.f1 != f1 {
+            self.f1 = f1;
+            self.lpf1.set_frequency(f1);
+            self.lpf2.set_frequency(f1);
+            self.hpf1.set_frequency(f1);
+            self.hpf2.set_frequency(f1);
+        }
+
+        if self.f2 != f2 {
+            self.f2 = f2;
+            self.lpf3.set_frequency(f2);
+            self.lpf4.set_frequency(f2);
+            self.hpf3.set_frequency(f2);
+            self.hpf4.set_frequency(f2);
+            self.apf.set_frequency(f2);
+        }
     }
 
     pub(crate) fn split_bands(&mut self, sample: Precision) -> [Precision; 3] {

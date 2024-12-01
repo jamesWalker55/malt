@@ -7,12 +7,17 @@ pub(crate) struct Envelope {
     sr: f32,
 
     // I'm storing samples, because the samplerate shouldn't change in the middle of the song
-    delay: f32,             // samples
-    delay_remaining: f32,   // samples
-    attack: f32,            // samples
-    attack_remaining: f32,  // samples
-    release: f32,           // samples
-    release_remaining: f32, // samples
+    delay_samples: f32,             // samples
+    attack_samples: f32,            // samples
+    release_samples: f32,           // samples
+    delay_samples_remaining: f32,   // samples
+    attack_samples_remaining: f32,  // samples
+    release_samples_remaining: f32, // samples
+
+    // Also store original seconds for faster comparisons
+    delay_seconds: f32,   // seconds
+    attack_seconds: f32,  // seconds
+    release_seconds: f32, // seconds
 
     // curves that define this envelope
     attack_curve: Curve,
@@ -23,25 +28,28 @@ impl Envelope {
     /// Arguments are in seconds
     pub(crate) fn new(
         sample_rate: f32,
-        delay: f32,
-        attack: f32,
-        release: f32,
+        delay_seconds: f32,
+        attack_seconds: f32,
+        release_seconds: f32,
         attack_curve: Curve,
         release_curve: Curve,
     ) -> Self {
         // convert seconds to samples
-        let delay = sample_rate * delay;
-        let attack = sample_rate * attack;
-        let release = sample_rate * release;
+        let delay_samples = sample_rate * delay_seconds;
+        let attack_samples = sample_rate * attack_seconds;
+        let release_samples = sample_rate * release_seconds;
 
         Self {
             sr: sample_rate,
-            delay,
-            delay_remaining: delay,
-            attack,
-            attack_remaining: attack,
-            release,
-            release_remaining: release,
+            delay_samples,
+            attack_samples,
+            release_samples,
+            delay_samples_remaining: delay_samples,
+            attack_samples_remaining: attack_samples,
+            release_samples_remaining: release_samples,
+            delay_seconds,
+            attack_seconds,
+            release_seconds,
             attack_curve,
             release_curve,
         }
@@ -111,49 +119,57 @@ impl Envelope {
     /// Update the release duration of the envelope (in seconds).
     /// If the envelope is still in attack/delay, this will reset the duration
     /// If the envelope is already releasing, only the remaining duration will be affected.
-    pub(crate) fn set_release(&mut self, release: f32) {
+    pub(crate) fn set_release(&mut self, release_seconds: f32) {
+        if self.release_seconds == release_seconds {
+            return;
+        }
+
         // convert seconds to samples
-        let release = self.sr * release;
+        let release_samples = self.sr * release_seconds;
 
         // do nothing if release is unchanged
-        if release == self.release {
+        if release_samples == self.release_samples {
             return;
         }
 
         if (
             // still in attack/delay stage
-            self.delay_remaining > 0.0 || self.attack_remaining > 0.0
+            self.delay_samples_remaining > 0.0 || self.attack_samples_remaining > 0.0
         ) || (
             // beginning of release stage, but not done anything yet
-            self.release == self.release_remaining
+            self.release_samples == self.release_samples_remaining
         ) {
             // reset the release to the new value
-            self.release_remaining = release;
-            self.release = release;
-        } else if self.release_remaining > 0.0 {
+            self.release_samples_remaining = release_samples;
+            self.release_samples = release_samples;
+        } else if self.release_samples_remaining > 0.0 {
             // in release stage, stretch the remaining release duration
-            let ratio = release / self.release;
-            self.release_remaining *= ratio;
+            let ratio = release_samples / self.release_samples;
+            self.release_samples_remaining *= ratio;
 
             // now we can update release as usual
-            self.release = release;
+            self.release_samples = release_samples;
         } else {
             // envelope has ended, do nothing
         }
     }
 
     pub(crate) fn is_complete(&self) -> bool {
-        self.delay_remaining <= 0.0 && self.attack_remaining <= 0.0 && self.release_remaining <= 0.0
+        self.delay_samples_remaining <= 0.0
+            && self.attack_samples_remaining <= 0.0
+            && self.release_samples_remaining <= 0.0
     }
 
     pub(crate) fn duration_samples(&self) -> f32 {
-        self.delay + self.attack + self.release
+        self.delay_samples + self.attack_samples + self.release_samples
     }
 
     /// Return the progress of this envelope in percentage (0.0 to 1.0)
     pub(crate) fn progress(&self) -> f32 {
-        1.0 - ((self.delay_remaining + self.attack_remaining + self.release_remaining)
-            / (self.delay + self.attack + self.release))
+        1.0 - ((self.delay_samples_remaining
+            + self.attack_samples_remaining
+            + self.release_samples_remaining)
+            / (self.delay_samples + self.attack_samples + self.release_samples))
     }
 
     /// Get the current value (from 0.0 -- 1.0), then increment the state.
@@ -161,24 +177,24 @@ impl Envelope {
     ///
     /// Note: This should be called once per sample.
     pub(crate) fn tick(&mut self) -> Option<f32> {
-        if self.delay_remaining > 0.0 {
+        if self.delay_samples_remaining > 0.0 {
             // in delay phase
-            self.delay_remaining -= 1.0;
+            self.delay_samples_remaining -= 1.0;
             Some(0.0)
-        } else if self.attack_remaining > 0.0 {
+        } else if self.attack_samples_remaining > 0.0 {
             // in attack phase
-            let x = 1.0 - self.attack_remaining / self.attack;
+            let x = 1.0 - self.attack_samples_remaining / self.attack_samples;
             let y = self.attack_curve.get_y(x);
 
-            self.attack_remaining -= 1.0;
+            self.attack_samples_remaining -= 1.0;
 
             Some(y)
-        } else if self.release_remaining > 0.0 {
+        } else if self.release_samples_remaining > 0.0 {
             // in release phase
-            let x = 1.0 - self.release_remaining / self.release;
+            let x = 1.0 - self.release_samples_remaining / self.release_samples;
             let y = 1.0 - self.release_curve.get_y(x);
 
-            self.release_remaining -= 1.0;
+            self.release_samples_remaining -= 1.0;
 
             Some(y)
         } else {
@@ -192,12 +208,15 @@ impl Default for Envelope {
     fn default() -> Self {
         Self {
             sr: Default::default(),
-            delay: Default::default(),
-            delay_remaining: Default::default(),
-            attack: Default::default(),
-            attack_remaining: Default::default(),
-            release: Default::default(),
-            release_remaining: Default::default(),
+            delay_samples: Default::default(),
+            attack_samples: Default::default(),
+            release_samples: Default::default(),
+            delay_samples_remaining: Default::default(),
+            attack_samples_remaining: Default::default(),
+            release_samples_remaining: Default::default(),
+            delay_seconds: Default::default(),
+            attack_seconds: Default::default(),
+            release_seconds: Default::default(),
             attack_curve: Curve::EaseInSine,
             release_curve: Curve::EaseInOutSine,
         }
