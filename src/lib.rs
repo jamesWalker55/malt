@@ -129,7 +129,7 @@ pub struct Malt {
     current_slope: Slope,
 }
 
-#[derive(Enum, PartialEq, Eq)]
+#[derive(Enum, PartialEq, Eq, Clone, Copy)]
 enum Slope {
     #[id = "fixed_24"]
     #[name = "24 dB/octave"]
@@ -610,7 +610,7 @@ impl Plugin for Malt {
             // maybe the number of parameters somehow causes the likelihood of crashing to increase?
             //
             // it took fucking forever to debug this, don't do it
-            let lookahead_samples = param_values.lookahead * ctx.transport().sample_rate;
+            let lookahead_samples = param_values.lookahead * sample_rate;
             let lookahead_samples = lookahead_samples.round() as u32;
 
             // nih_log!("Changing latency samples to:");
