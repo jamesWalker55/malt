@@ -29,7 +29,6 @@ pub(crate) enum KnobStyle {
     },
     Donut {
         line_width: f32,
-        text: Option<KnobDonutText>,
     },
 }
 
@@ -91,17 +90,9 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
         // Figure out the size to reserve on screen for widget
         let mut response = {
             // minimum bounding box
-            let bounding_box = if let KnobStyle::Donut {
-                text: Some(KnobDonutText { spacing, width, .. }),
-                ..
-            } = self.style
-            {
-                vec2(self.size + spacing + width, self.size)
-            } else {
-                Vec2::splat(self.size)
-            };
+            let bounding_box = Vec2::splat(self.size);
 
-            ui.allocate_response(bounding_box, Sense::click_and_drag())
+            ui.allocate_response(Vec2::splat(self.size), Sense::click_and_drag())
         };
         let rect = response.rect;
 
@@ -266,17 +257,10 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
                     }
                 }
             }
-            KnobStyle::Donut { line_width, text } => {
+            KnobStyle::Donut { line_width } => {
                 let painter = ui.painter_at(rect);
                 // center of knob
-                let center = {
-                    let mut rv = rect.center();
-                    if text.is_some() {
-                        // align knob to the left if there is text
-                        rv.x = rect.left() + self.size / 2.0;
-                    }
-                    rv
-                };
+                let center = rect.center();
 
                 // since we will draw a stroke, we need to account for the line's width
                 // outline radius should be: size / 2.0 - line_width / 2.0
@@ -318,23 +302,6 @@ impl<'a, P: Param> Widget for Knob<'a, P> {
                         stroke: PathStroke::new(*line_width, Self::LINE_COLOR),
                     });
                     painter.add(shape);
-                }
-
-                // draw text label
-                if let Some(text) = text {
-                    let mut text_rect = rect;
-                    text_rect.set_left(text_rect.left() + self.size + text.spacing);
-
-                    // clip text to the bounds
-                    let painter = ui.painter_at(text_rect);
-
-                    painter.text(
-                        response.rect.center(),
-                        Align2::CENTER_CENTER,
-                        self.param.to_string(),
-                        text.font_id.clone(),
-                        text.color,
-                    );
                 }
             }
         }

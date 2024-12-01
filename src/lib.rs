@@ -9,12 +9,14 @@ mod svf;
 use biquad::{FirstOrderLP, FixedQFilter};
 use envelope::Curve;
 use envelope::Envelope;
+use formatters::v2s_f32_rounded;
 use nih_plug::prelude::*;
 use nih_plug_egui::EguiState;
 use parameter_formatters::{s2v_f32_ms_then_s, v2s_f32_ms_then_s};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use splitter::MinimumThreeBand12Slope;
 use splitter::MinimumThreeBand24Slope;
+use std::sync::atomic::AtomicU8;
 use std::sync::Arc;
 use util::db_to_gain;
 
@@ -177,6 +179,9 @@ struct MaltParams {
     /// restored.
     #[persist = "editor-state"]
     editor_state: Arc<EguiState>,
+    /// The channel being edited on the UI
+    #[persist = "editor-state-active-channel"]
+    editor_state_active_channel: Arc<AtomicU8>,
 }
 
 impl Default for MaltParams {
@@ -247,6 +252,7 @@ impl Default for MaltParams {
             ),
 
             editor_state: EguiState::from_size(gui::GUI_DEFAULT_WIDTH, gui::GUI_DEFAULT_HEIGHT),
+            editor_state_active_channel: Default::default(), // default to 0
         }
     }
 }
@@ -459,34 +465,40 @@ impl Default for ChannelParams {
 
             low_db: FloatParam::new(
                 "Low gain reduction",
-                db_to_gain(-30.0),
+                0.0,
                 FloatRange::Skewed {
                     min: 0.0,
                     max: 90.0,
                     factor: FloatRange::skew_factor(-1.0),
                 },
             )
-            .with_unit(" dB"),
+            .with_unit(" dB")
+            .with_value_to_string(v2s_f32_rounded(2))
+            .with_string_to_value(s2v_f32_ms_then_s()),
             mid_db: FloatParam::new(
                 "Mid gain reduction",
-                db_to_gain(-30.0),
+                0.0,
                 FloatRange::Skewed {
                     min: 0.0,
                     max: 90.0,
                     factor: FloatRange::skew_factor(-1.0),
                 },
             )
-            .with_unit(" dB"),
+            .with_unit(" dB")
+            .with_value_to_string(v2s_f32_rounded(2))
+            .with_string_to_value(s2v_f32_ms_then_s()),
             high_db: FloatParam::new(
                 "High gain reduction",
-                db_to_gain(-30.0),
+                0.0,
                 FloatRange::Skewed {
                     min: 0.0,
                     max: 90.0,
                     factor: FloatRange::skew_factor(-1.0),
                 },
             )
-            .with_unit(" dB"),
+            .with_unit(" dB")
+            .with_value_to_string(v2s_f32_rounded(2))
+            .with_string_to_value(s2v_f32_ms_then_s()),
         }
     }
 }
