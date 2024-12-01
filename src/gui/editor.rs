@@ -107,7 +107,7 @@ fn simple_block_button(
             bg_color,
             bg_color,
             active_color,
-            active_color.lerp_to_gamma(C::FG_WHITE, 0.1),
+            active_color.lerp_to_gamma(C::FG_WHITE, 0.2),
             active_color.lerp_to_gamma(C::BG_DARK, 0.2),
         ))
     } else {
