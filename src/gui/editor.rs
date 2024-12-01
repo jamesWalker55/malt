@@ -271,7 +271,7 @@ pub(crate) fn create_gui(
                 .show(ctx, &egui_state, |ui| {
                     egui::SidePanel::left("left panel")
                         .exact_width(250.0)
-                        .resizable(true)
+                        .resizable(false)
                         .frame(egui::Frame::none().fill(C::BG_NORMAL))
                         .show(ctx, |ui| {
                             fn blockbutton_param<'a>(
