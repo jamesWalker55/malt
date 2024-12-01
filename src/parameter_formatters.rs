@@ -5,12 +5,39 @@ type S2VFormatter = dyn Fn(&str) -> Option<f32> + Send + Sync;
 
 /// Format a `f32` Hertz value as a rounded `Hz` below 1000 Hz, and as a rounded `kHz` value above
 /// 1000 Hz. This already includes the unit.
-pub(crate) fn v2s_f32_ms_then_s(digits: usize) -> Arc<V2SFormatter> {
-    Arc::new(move |value| {
-        if value < 1000.0 {
-            format!("{value:.digits$} ms")
+pub(crate) fn v2s_f32_ms_then_s(sigfig: usize) -> Arc<V2SFormatter> {
+    Arc::new(move |mut value| {
+        let mut is_seconds = false;
+        if value >= 1000.0 {
+            value = value / 1000.0;
+            is_seconds = true;
+        }
+        
+        // calculate digits after dot based on value and precision
+        // https://stackoverflow.com/questions/60497397/how-do-you-format-a-float-to-the-first-significant-decimal-and-with-specified-pr
+        let digits = {
+            // compute absolute value
+            let value_abs = value.abs();
+
+            if value_abs >= 1.0 {
+                // reduce by number of digits, minimum 0
+                let n = (1.0 + value_abs.log10().floor()) as usize;
+                if n <= sigfig {
+                    sigfig - n
+                } else {
+                    0
+                }
+            } else if value_abs > 0.0 {
+                sigfig - 1
+            } else {
+                0
+            }
+        };
+
+        if is_seconds {
+            format!("{value:.digits$} s")
         } else {
-            format!("{:.digits$} s", value / 1000.0, digits = digits.max(1))
+            format!("{value:.digits$} ms")
         }
     })
 }

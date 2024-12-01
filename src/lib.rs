@@ -205,7 +205,7 @@ impl Default for MaltParams {
                     max: MAX_LATENCY_SECONDS * 1000.0,
                 },
             )
-            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_value_to_string(v2s_f32_ms_then_s(4))
             .with_string_to_value(s2v_f32_ms_then_s())
             .non_automatable(),
 
@@ -312,7 +312,7 @@ impl Default for ChannelParams {
                     max: MAX_LATENCY_SECONDS * 1000.0,
                 },
             )
-            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_value_to_string(v2s_f32_ms_then_s(4))
             .with_string_to_value(s2v_f32_ms_then_s()),
             mid_precomp: FloatParam::new(
                 "Mid precomp",
@@ -322,7 +322,7 @@ impl Default for ChannelParams {
                     max: MAX_LATENCY_SECONDS * 1000.0,
                 },
             )
-            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_value_to_string(v2s_f32_ms_then_s(4))
             .with_string_to_value(s2v_f32_ms_then_s()),
             high_precomp: FloatParam::new(
                 "High precomp",
@@ -332,7 +332,7 @@ impl Default for ChannelParams {
                     max: MAX_LATENCY_SECONDS * 1000.0,
                 },
             )
-            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_value_to_string(v2s_f32_ms_then_s(4))
             .with_string_to_value(s2v_f32_ms_then_s()),
 
             low_decay: FloatParam::new(
@@ -345,7 +345,7 @@ impl Default for ChannelParams {
                     factor: FloatRange::skew_factor(-1.6),
                 },
             )
-            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_value_to_string(v2s_f32_ms_then_s(4))
             .with_string_to_value(s2v_f32_ms_then_s()),
             mid_decay: FloatParam::new(
                 "Mid decay",
@@ -357,7 +357,7 @@ impl Default for ChannelParams {
                     factor: FloatRange::skew_factor(-1.6),
                 },
             )
-            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_value_to_string(v2s_f32_ms_then_s(4))
             .with_string_to_value(s2v_f32_ms_then_s()),
             high_decay: FloatParam::new(
                 "High decay",
@@ -369,7 +369,7 @@ impl Default for ChannelParams {
                     factor: FloatRange::skew_factor(-1.6),
                 },
             )
-            .with_value_to_string(v2s_f32_ms_then_s(3))
+            .with_value_to_string(v2s_f32_ms_then_s(4))
             .with_string_to_value(s2v_f32_ms_then_s()),
 
             low_db: FloatParam::new(
