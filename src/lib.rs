@@ -369,27 +369,30 @@ impl Default for ChannelParams {
             low_db: FloatParam::new(
                 "Low gain reduction",
                 db_to_gain(-30.0),
-                FloatRange::Linear {
+                FloatRange::Skewed {
                     min: 0.0,
                     max: 90.0,
+                    factor: FloatRange::skew_factor(-1.0),
                 },
             )
             .with_unit(" dB"),
             mid_db: FloatParam::new(
                 "Mid gain reduction",
                 db_to_gain(-30.0),
-                FloatRange::Linear {
+                FloatRange::Skewed {
                     min: 0.0,
                     max: 90.0,
+                    factor: FloatRange::skew_factor(-1.0),
                 },
             )
             .with_unit(" dB"),
             high_db: FloatParam::new(
                 "High gain reduction",
                 db_to_gain(-30.0),
-                FloatRange::Linear {
+                FloatRange::Skewed {
                     min: 0.0,
                     max: 90.0,
+                    factor: FloatRange::skew_factor(-1.0),
                 },
             )
             .with_unit(" dB"),
