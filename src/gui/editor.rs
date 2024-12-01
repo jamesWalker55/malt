@@ -13,19 +13,21 @@ use nih_plug_egui::{
     create_egui_editor,
     egui::{
         self,
+        style::ScrollStyle,
         text::{LayoutJob, TextWrapping},
         vec2, Align, CentralPanel, Color32, Context, FontFamily, FontId, Id, Label, Layout,
-        Painter, Pos2, Rect, Response, RichText, Spacing, Style, TextStyle, Ui, UiBuilder, Vec2,
+        Painter, Pos2, Rect, Response, RichText, ScrollArea, Spacing, Style, TextStyle, Ui,
+        UiBuilder, Vec2,
     },
     resizable_window::ResizableWindow,
     widgets::{self, ParamSlider},
 };
 
 // the DPI-independent size of the window
-pub(crate) const GUI_DEFAULT_WIDTH: u32 = 651;
-pub(crate) const GUI_DEFAULT_HEIGHT: u32 = 391;
-pub(crate) const GUI_MINIMUM_WIDTH: u32 = 128;
-pub(crate) const GUI_MINIMUM_HEIGHT: u32 = 128;
+// pub(crate) const GUI_DEFAULT_WIDTH: u32 = 651;
+// pub(crate) const GUI_DEFAULT_HEIGHT: u32 = 391;
+// pub(crate) const GUI_MINIMUM_WIDTH: u32 = 128;
+// pub(crate) const GUI_MINIMUM_HEIGHT: u32 = 128;
 
 /// Rich text
 fn rt(ui: &mut egui::Ui, text: impl Into<String>, family: &FontFamily, size: f32, color: Color32) {
@@ -188,6 +190,12 @@ fn panel_band<'a, P: Param>(
     });
 }
 
+// TEMP SIZES
+pub(crate) const GUI_DEFAULT_WIDTH: u32 = 560;
+pub(crate) const GUI_DEFAULT_HEIGHT: u32 = 350;
+pub(crate) const GUI_MINIMUM_WIDTH: u32 = 560;
+pub(crate) const GUI_MINIMUM_HEIGHT: u32 = 350;
+/// TEMP GUI
 pub(crate) fn create_gui(
     plugin: &mut Malt,
     _async_executor: AsyncExecutor<Malt>,
@@ -196,7 +204,7 @@ pub(crate) fn create_gui(
     let egui_state = plugin.params.editor_state.clone();
     create_egui_editor(
         plugin.params.editor_state.clone(),
-        UIState::new(),
+        (),
         |ctx, state| {
             // Load new fonts
             {
@@ -261,25 +269,11 @@ pub(crate) fn create_gui(
             ResizableWindow::new("resizable-window")
                 .min_size(vec2(GUI_MINIMUM_WIDTH as f32, GUI_MINIMUM_HEIGHT as f32))
                 .show(ctx, &egui_state, |ui| {
-                    egui::CentralPanel::default()
+                    egui::SidePanel::left("left panel")
+                        .exact_width(250.0)
+                        .resizable(true)
                         .frame(egui::Frame::none().fill(C::BG_NORMAL))
                         .show(ctx, |ui| {
-                            fn checkbox_param<'a>(
-                                ui: &mut Ui,
-                                param: &BoolParam,
-                                param_setter: &'a ParamSetter,
-                            ) -> Response {
-                                let old_active = param.value();
-                                let mut new_active = old_active;
-                                let res = ui.checkbox(&mut new_active, param.name());
-                                if old_active != new_active {
-                                    param_setter.begin_set_parameter(param);
-                                    param_setter.set_parameter(param, new_active);
-                                    param_setter.end_set_parameter(param);
-                                }
-                                res
-                            }
-
                             fn blockbutton_param<'a>(
                                 ui: &mut Ui,
                                 param: &BoolParam,
@@ -329,23 +323,21 @@ pub(crate) fn create_gui(
 
                             // options section
                             rt(ui, "Options", &C::FONT_NORMAL, C::TEXT_BASE, C::FG_GREY);
+                            blockbutton_param(
+                                ui,
+                                &params.smoothing,
+                                setter,
+                                ButtonContent::Text(
+                                    "Smooth",
+                                    FontId::new(C::TEXT_BASE, C::FONT_NORMAL),
+                                ),
+                                vec2(52.0, 22.0),
+                                C::FG_BLUE,
+                                C::FG_WHITE,
+                                C::BG_NORMAL,
+                            );
+
                             ui.horizontal(|ui| {
-                                blockbutton_param(
-                                    ui,
-                                    &params.smoothing,
-                                    setter,
-                                    ButtonContent::Text(
-                                        "Smooth",
-                                        FontId::new(C::TEXT_BASE, C::FONT_NORMAL),
-                                    ),
-                                    vec2(52.0, 22.0),
-                                    C::FG_BLUE,
-                                    C::FG_WHITE,
-                                    C::BG_NORMAL,
-                                );
-
-                                ui.add_space(24.0);
-
                                 rt(ui, "Lookahead", &C::FONT_NORMAL, C::TEXT_SM, C::FG_GREY);
                                 ui.add(Knob::for_param(
                                     &params.lookahead,
@@ -366,9 +358,9 @@ pub(crate) fn create_gui(
                                     true,
                                     false,
                                 ));
+                            });
 
-                                ui.add_space(24.0);
-
+                            ui.horizontal(|ui| {
                                 rt(ui, "Mix", &C::FONT_NORMAL, C::TEXT_SM, C::FG_GREY);
                                 ui.add(Knob::for_param(
                                     &params.mix,
@@ -393,10 +385,9 @@ pub(crate) fn create_gui(
                             ui.horizontal(|ui| {
                                 rt(ui, "MIDI Mode", &C::FONT_NORMAL, C::TEXT_SM, C::FG_GREY);
                                 ui.add(ParamSlider::for_param(&params.midi_mode, setter));
-
-                                if matches!(params.midi_mode.value(), MIDIProcessingMode::Pitch) {
-                                    ui.add_space(24.0);
-
+                            });
+                            if matches!(params.midi_mode.value(), MIDIProcessingMode::Pitch) {
+                                ui.horizontal(|ui| {
                                     rt(ui, "Root note", &C::FONT_NORMAL, C::TEXT_SM, C::FG_GREY);
                                     ui.add(Knob::for_param(
                                         &params.midi_root_note,
@@ -417,8 +408,8 @@ pub(crate) fn create_gui(
                                         true,
                                         false,
                                     ));
-                                }
-                            });
+                                });
+                            }
 
                             ui.separator();
 
@@ -427,28 +418,9 @@ pub(crate) fn create_gui(
                             ui.horizontal(|ui| {
                                 rt(ui, "Slope", &C::FONT_NORMAL, C::TEXT_SM, C::FG_GREY);
                                 ui.add(ParamSlider::for_param(&params.crossover_slope, setter));
+                            });
 
-                                ui.add_space(24.0);
-
-                                ui.add(Knob::for_param(
-                                    &params.low_crossover,
-                                    setter,
-                                    15.0,
-                                    KnobStyle::Donut { line_width: 4.0 },
-                                ));
-                                ui.add(KnobText::for_param(
-                                    &params.low_crossover,
-                                    setter,
-                                    vec2(70.0, 15.0),
-                                    FontId::new(C::TEXT_SM, C::FONT_NORMAL),
-                                    C::FG_WHITE,
-                                    true,
-                                    true,
-                                    false,
-                                ));
-
-                                ui.add_space(24.0);
-
+                            ui.horizontal(|ui| {
                                 ui.add(Knob::for_param(
                                     &params.high_crossover,
                                     setter,
@@ -466,6 +438,26 @@ pub(crate) fn create_gui(
                                     false,
                                 ));
                             });
+
+                            ui.horizontal(|ui| {
+                                ui.add(Knob::for_param(
+                                    &params.low_crossover,
+                                    setter,
+                                    15.0,
+                                    KnobStyle::Donut { line_width: 4.0 },
+                                ));
+                                ui.add(KnobText::for_param(
+                                    &params.low_crossover,
+                                    setter,
+                                    vec2(70.0, 15.0),
+                                    FontId::new(C::TEXT_SM, C::FONT_NORMAL),
+                                    C::FG_WHITE,
+                                    true,
+                                    true,
+                                    false,
+                                ));
+                            });
+
                             ui.horizontal(|ui| {
                                 rt(ui, "HIGH", &C::FONT_NORMAL, C::TEXT_SM, C::FG_GREY);
 
@@ -595,211 +587,217 @@ pub(crate) fn create_gui(
                                     C::BG_NORMAL,
                                 );
                             });
+                        });
 
-                            ui.separator();
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::none().fill(C::BG_NORMAL))
+                        .show(ctx, |ui| {
+                            ui.style_mut().spacing.scroll = ScrollStyle::solid();
+                            ScrollArea::vertical().show(ui, |ui| {
+                                // channels
+                                let channel_count =
+                                    if matches!(params.midi_mode.value(), MIDIProcessingMode::Omni)
+                                    {
+                                        1
+                                    } else {
+                                        16
+                                    };
 
-                            // channels
-                            let channel_count =
-                                if matches!(params.midi_mode.value(), MIDIProcessingMode::Omni) {
-                                    1
-                                } else {
-                                    16
-                                };
+                                for i in 0..channel_count {
+                                    let ch = &params.channels[i];
 
-                            for i in 0..channel_count {
-                                let ch = &params.channels[i];
-
-                                rt(
-                                    ui,
-                                    format!("Channel {}", i),
-                                    &C::FONT_NORMAL,
-                                    C::TEXT_BASE,
-                                    C::FG_GREY,
-                                );
-                                ui.horizontal(|ui| {
-                                    ui.add(Knob::for_param(
-                                        &ch.high_precomp,
-                                        setter,
-                                        24.0,
-                                        KnobStyle::Analog {
-                                            highlight_color: C::FG_YELLOW,
-                                            line_width: 2.0,
-                                        },
-                                    ));
-                                    ui.add(KnobText::for_param(
-                                        &ch.high_precomp,
-                                        setter,
-                                        vec2(60.0, 24.0),
-                                        FontId::new(C::TEXT_SM, C::FONT_NORMAL),
+                                    rt(
+                                        ui,
+                                        format!("Channel {}", i),
+                                        &C::FONT_NORMAL,
+                                        C::TEXT_BASE,
                                         C::FG_GREY,
-                                        true,
-                                        true,
-                                        false,
-                                    ));
+                                    );
+                                    ui.horizontal(|ui| {
+                                        ui.add(Knob::for_param(
+                                            &ch.high_precomp,
+                                            setter,
+                                            24.0,
+                                            KnobStyle::Analog {
+                                                highlight_color: C::FG_YELLOW,
+                                                line_width: 2.0,
+                                            },
+                                        ));
+                                        ui.add(KnobText::for_param(
+                                            &ch.high_precomp,
+                                            setter,
+                                            vec2(60.0, 24.0),
+                                            FontId::new(C::TEXT_SM, C::FONT_NORMAL),
+                                            C::FG_GREY,
+                                            true,
+                                            true,
+                                            false,
+                                        ));
 
-                                    ui.add(Knob::for_param(
-                                        &ch.high_decay,
-                                        setter,
-                                        24.0,
-                                        KnobStyle::Analog {
-                                            highlight_color: C::FG_YELLOW,
-                                            line_width: 2.0,
-                                        },
-                                    ));
-                                    ui.add(KnobText::for_param(
-                                        &ch.high_decay,
-                                        setter,
-                                        vec2(60.0, 24.0),
-                                        FontId::new(C::TEXT_SM, C::FONT_NORMAL),
-                                        C::FG_GREY,
-                                        true,
-                                        true,
-                                        false,
-                                    ));
+                                        ui.add(Knob::for_param(
+                                            &ch.high_decay,
+                                            setter,
+                                            24.0,
+                                            KnobStyle::Analog {
+                                                highlight_color: C::FG_YELLOW,
+                                                line_width: 2.0,
+                                            },
+                                        ));
+                                        ui.add(KnobText::for_param(
+                                            &ch.high_decay,
+                                            setter,
+                                            vec2(60.0, 24.0),
+                                            FontId::new(C::TEXT_SM, C::FONT_NORMAL),
+                                            C::FG_GREY,
+                                            true,
+                                            true,
+                                            false,
+                                        ));
 
-                                    ui.add(Knob::for_param(
-                                        &ch.high_db,
-                                        setter,
-                                        24.0,
-                                        KnobStyle::Analog {
-                                            highlight_color: C::FG_WHITE,
-                                            line_width: 2.0,
-                                        },
-                                    ));
-                                    ui.add(KnobText::for_param(
-                                        &ch.high_db,
-                                        setter,
-                                        vec2(60.0, 24.0),
-                                        FontId::new(C::TEXT_SM, C::FONT_NORMAL),
-                                        C::FG_GREY,
-                                        true,
-                                        true,
-                                        false,
-                                    ));
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.add(Knob::for_param(
-                                        &ch.mid_precomp,
-                                        setter,
-                                        24.0,
-                                        KnobStyle::Analog {
-                                            highlight_color: C::FG_PURPLE,
-                                            line_width: 2.0,
-                                        },
-                                    ));
-                                    ui.add(KnobText::for_param(
-                                        &ch.mid_precomp,
-                                        setter,
-                                        vec2(60.0, 24.0),
-                                        FontId::new(C::TEXT_SM, C::FONT_NORMAL),
-                                        C::FG_GREY,
-                                        true,
-                                        true,
-                                        false,
-                                    ));
+                                        ui.add(Knob::for_param(
+                                            &ch.high_db,
+                                            setter,
+                                            24.0,
+                                            KnobStyle::Analog {
+                                                highlight_color: C::FG_WHITE,
+                                                line_width: 2.0,
+                                            },
+                                        ));
+                                        ui.add(KnobText::for_param(
+                                            &ch.high_db,
+                                            setter,
+                                            vec2(60.0, 24.0),
+                                            FontId::new(C::TEXT_SM, C::FONT_NORMAL),
+                                            C::FG_GREY,
+                                            true,
+                                            true,
+                                            false,
+                                        ));
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.add(Knob::for_param(
+                                            &ch.mid_precomp,
+                                            setter,
+                                            24.0,
+                                            KnobStyle::Analog {
+                                                highlight_color: C::FG_PURPLE,
+                                                line_width: 2.0,
+                                            },
+                                        ));
+                                        ui.add(KnobText::for_param(
+                                            &ch.mid_precomp,
+                                            setter,
+                                            vec2(60.0, 24.0),
+                                            FontId::new(C::TEXT_SM, C::FONT_NORMAL),
+                                            C::FG_GREY,
+                                            true,
+                                            true,
+                                            false,
+                                        ));
 
-                                    ui.add(Knob::for_param(
-                                        &ch.mid_decay,
-                                        setter,
-                                        24.0,
-                                        KnobStyle::Analog {
-                                            highlight_color: C::FG_PURPLE,
-                                            line_width: 2.0,
-                                        },
-                                    ));
-                                    ui.add(KnobText::for_param(
-                                        &ch.mid_decay,
-                                        setter,
-                                        vec2(60.0, 24.0),
-                                        FontId::new(C::TEXT_SM, C::FONT_NORMAL),
-                                        C::FG_GREY,
-                                        true,
-                                        true,
-                                        false,
-                                    ));
+                                        ui.add(Knob::for_param(
+                                            &ch.mid_decay,
+                                            setter,
+                                            24.0,
+                                            KnobStyle::Analog {
+                                                highlight_color: C::FG_PURPLE,
+                                                line_width: 2.0,
+                                            },
+                                        ));
+                                        ui.add(KnobText::for_param(
+                                            &ch.mid_decay,
+                                            setter,
+                                            vec2(60.0, 24.0),
+                                            FontId::new(C::TEXT_SM, C::FONT_NORMAL),
+                                            C::FG_GREY,
+                                            true,
+                                            true,
+                                            false,
+                                        ));
 
-                                    ui.add(Knob::for_param(
-                                        &ch.mid_db,
-                                        setter,
-                                        24.0,
-                                        KnobStyle::Analog {
-                                            highlight_color: C::FG_WHITE,
-                                            line_width: 2.0,
-                                        },
-                                    ));
-                                    ui.add(KnobText::for_param(
-                                        &ch.mid_db,
-                                        setter,
-                                        vec2(60.0, 24.0),
-                                        FontId::new(C::TEXT_SM, C::FONT_NORMAL),
-                                        C::FG_GREY,
-                                        true,
-                                        true,
-                                        false,
-                                    ));
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.add(Knob::for_param(
-                                        &ch.low_precomp,
-                                        setter,
-                                        24.0,
-                                        KnobStyle::Analog {
-                                            highlight_color: C::FG_BLUE,
-                                            line_width: 2.0,
-                                        },
-                                    ));
-                                    ui.add(KnobText::for_param(
-                                        &ch.low_precomp,
-                                        setter,
-                                        vec2(60.0, 24.0),
-                                        FontId::new(C::TEXT_SM, C::FONT_NORMAL),
-                                        C::FG_GREY,
-                                        true,
-                                        true,
-                                        false,
-                                    ));
+                                        ui.add(Knob::for_param(
+                                            &ch.mid_db,
+                                            setter,
+                                            24.0,
+                                            KnobStyle::Analog {
+                                                highlight_color: C::FG_WHITE,
+                                                line_width: 2.0,
+                                            },
+                                        ));
+                                        ui.add(KnobText::for_param(
+                                            &ch.mid_db,
+                                            setter,
+                                            vec2(60.0, 24.0),
+                                            FontId::new(C::TEXT_SM, C::FONT_NORMAL),
+                                            C::FG_GREY,
+                                            true,
+                                            true,
+                                            false,
+                                        ));
+                                    });
+                                    ui.horizontal(|ui| {
+                                        ui.add(Knob::for_param(
+                                            &ch.low_precomp,
+                                            setter,
+                                            24.0,
+                                            KnobStyle::Analog {
+                                                highlight_color: C::FG_BLUE,
+                                                line_width: 2.0,
+                                            },
+                                        ));
+                                        ui.add(KnobText::for_param(
+                                            &ch.low_precomp,
+                                            setter,
+                                            vec2(60.0, 24.0),
+                                            FontId::new(C::TEXT_SM, C::FONT_NORMAL),
+                                            C::FG_GREY,
+                                            true,
+                                            true,
+                                            false,
+                                        ));
 
-                                    ui.add(Knob::for_param(
-                                        &ch.low_decay,
-                                        setter,
-                                        24.0,
-                                        KnobStyle::Analog {
-                                            highlight_color: C::FG_BLUE,
-                                            line_width: 2.0,
-                                        },
-                                    ));
-                                    ui.add(KnobText::for_param(
-                                        &ch.low_decay,
-                                        setter,
-                                        vec2(60.0, 24.0),
-                                        FontId::new(C::TEXT_SM, C::FONT_NORMAL),
-                                        C::FG_GREY,
-                                        true,
-                                        true,
-                                        false,
-                                    ));
+                                        ui.add(Knob::for_param(
+                                            &ch.low_decay,
+                                            setter,
+                                            24.0,
+                                            KnobStyle::Analog {
+                                                highlight_color: C::FG_BLUE,
+                                                line_width: 2.0,
+                                            },
+                                        ));
+                                        ui.add(KnobText::for_param(
+                                            &ch.low_decay,
+                                            setter,
+                                            vec2(60.0, 24.0),
+                                            FontId::new(C::TEXT_SM, C::FONT_NORMAL),
+                                            C::FG_GREY,
+                                            true,
+                                            true,
+                                            false,
+                                        ));
 
-                                    ui.add(Knob::for_param(
-                                        &ch.low_db,
-                                        setter,
-                                        24.0,
-                                        KnobStyle::Analog {
-                                            highlight_color: C::FG_WHITE,
-                                            line_width: 2.0,
-                                        },
-                                    ));
-                                    ui.add(KnobText::for_param(
-                                        &ch.low_db,
-                                        setter,
-                                        vec2(60.0, 24.0),
-                                        FontId::new(C::TEXT_SM, C::FONT_NORMAL),
-                                        C::FG_GREY,
-                                        true,
-                                        true,
-                                        false,
-                                    ));
-                                });
-                            }
+                                        ui.add(Knob::for_param(
+                                            &ch.low_db,
+                                            setter,
+                                            24.0,
+                                            KnobStyle::Analog {
+                                                highlight_color: C::FG_WHITE,
+                                                line_width: 2.0,
+                                            },
+                                        ));
+                                        ui.add(KnobText::for_param(
+                                            &ch.low_db,
+                                            setter,
+                                            vec2(60.0, 24.0),
+                                            FontId::new(C::TEXT_SM, C::FONT_NORMAL),
+                                            C::FG_GREY,
+                                            true,
+                                            true,
+                                            false,
+                                        ));
+                                    });
+                                }
+                            });
                         });
                 });
         },
