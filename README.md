@@ -4,14 +4,15 @@
 
 _(^ Mockup design, not actual product)_
 
-This was intended to be a multiband-sidechain plugin, where each band can have a different curve, attack/release times.
+This was intended to be a MIDI-triggered multiband-sidechain plugin, where each band can have a different curve, attack/release times.
 
-However, the `nih-plug` framework is not mature enough and I've run into some issues:
+However, the `nih-plug` framework is not mature enough and I've run into a lot of issues:
 
-- Unable to hide/lock mouse cursor when dragging a knob
 - Text input does not work on Windows (https://github.com/robbert-vdh/nih-plug/issues/154, https://github.com/RustAudio/baseview/issues/192)
+    - the `"windows_keyboard_workaround"` workaround in `nih_plug_egui` doesn't fix the issue
+- Unable to hide/lock mouse cursor when dragging a knob (https://github.com/robbert-vdh/nih-plug/issues/179)
 - CLAP plugin randomly crashes when changing latency (https://github.com/robbert-vdh/nih-plug/issues/177)
-- Opening/Closing GUI causes a memory leak and evetually causes out-of-memory (https://github.com/robbert-vdh/nih-plug/issues/173)
+- Opening/Closing GUI causes a memory leak and eventually causes out-of-memory (https://github.com/robbert-vdh/nih-plug/issues/173)
 
 ## Actual progress
 
